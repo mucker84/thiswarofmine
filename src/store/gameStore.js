@@ -1,23 +1,21 @@
 import { create } from 'zustand';
 
-// 1 real sekunda = 1 herní minuta
-// Den: 480 tiků (8 hodin), Noc: 240 tiků (4 hodiny)
 const DAY_TICKS = 480;
 const NIGHT_TICKS = 240;
 const TOTAL_CYCLE = DAY_TICKS + NIGHT_TICKS;
 
-// Suroviny přidané automaticky každou noc (scavenging placeholder)
-const NIGHT_LOOT = { scrap: 40, wood: 20, coal: 8, parts: 4 };
+// Noc přinese suroviny + trochu vody
+const NIGHT_LOOT = { scrap: 40, wood: 20, coal: 8, parts: 4, water: 8 };
 
 export const useGameStore = create((set, get) => ({
   // --- ČAS ---
   tick: 0,
   dayNumber: 1,
-  phase: 'day',        // 'day' | 'night'
-  timeOfDay: 360,      // minuty 0–1439, začínáme v 6:00
-  nightLootGiven: false, // aby se loot dal jen jednou za noc
+  phase: 'day',
+  timeOfDay: 360,
+  nightLootGiven: false,
 
-  // --- STAVY PŘEŽITÍ (0–100, float) ---
+  // --- STAVY (0–100 float) ---
   stats: {
     health: 82,
     food: 70,
@@ -36,20 +34,21 @@ export const useGameStore = create((set, get) => ({
 
   // --- BUDOVY ---
   buildings: {
-    boiler:     { built: true,  level: 1, fuel: 24 },
-    dynamo:     { built: false, level: 0 },
-    greenhouse: { built: false, level: 0 },
-    distillery: { built: false, level: 0 },
-    workshop:   { built: false, level: 0 },
+    boiler:    { built: true,  level: 1, fuel: 24 },
+    dynamo:    { built: false, level: 0 },
+    collector: { built: false, level: 0 }, // Sběrač kondenzátu — levný, voda ze páry kotle
+    distillery:{ built: false, level: 0 }, // Destilérka — pokročilejší, více vody, závisí na kotli
+    greenhouse:{ built: false, level: 0 },
+    workshop:  { built: false, level: 0 },
   },
 
-  // --- ZPRÁVY / LOG ---
-  messages: [],   // { id, text, type: 'warning'|'info'|'loot' }
+  // --- LOG ---
+  messages: [],
 
   // --- ÚKOLY ---
   tasks: [
     { id: 1, text: 'Přiložit do kotle', done: false },
-    { id: 2, text: 'Nasbírat vodu', done: false },
+    { id: 2, text: 'Postavit sběrač kondenzátu', done: false },
     { id: 3, text: 'Prohledat sutiny', done: true },
   ],
 
@@ -58,43 +57,43 @@ export const useGameStore = create((set, get) => ({
   activeLeftTab: 'tasks',
   paused: false,
 
-  // --- AKCE ---
+  // ─── AKCE ──────────────────────────────────────────────────────────────────
 
   setActiveModal: (modal) => set({ activeModal: modal }),
-  setActiveLeftTab: (tab) => set({ activeLeftTab: tab }),
-  togglePause: () => set(s => ({ paused: !s.paused })),
-
-  toggleTask: (id) => set(s => ({
+  setActiveLeftTab: (tab)  => set({ activeLeftTab: tab }),
+  togglePause: ()          => set(s => ({ paused: !s.paused })),
+  toggleTask:  (id)        => set(s => ({
     tasks: s.tasks.map(t => t.id === id ? { ...t, done: !t.done } : t),
   })),
 
-  addMessage: (text, type = 'info') => set(s => {
-    const id = Date.now();
-    const messages = [{ id, text, type }, ...s.messages].slice(0, 8);
-    return { messages };
-  }),
-
-  dismissMessage: (id) => set(s => ({
-    messages: s.messages.filter(m => m.id !== id),
+  addMessage: (text, type = 'info') => set(s => ({
+    messages: [{ id: Date.now(), text, type }, ...s.messages].slice(0, 10),
   })),
 
-  stokeBoiler: () => set(s => {
+  // Přiložit uhlí: 1 uhlí → +10 paliva
+  stokeCoal: () => set(s => {
     if (s.resources.coal < 1) return s;
-    const newFuel = Math.min(s.buildings.boiler.fuel + 10, 100);
     return {
       resources: { ...s.resources, coal: s.resources.coal - 1 },
-      buildings: {
-        ...s.buildings,
-        boiler: { ...s.buildings.boiler, fuel: newFuel },
-      },
+      buildings: { ...s.buildings, boiler: { ...s.buildings.boiler, fuel: Math.min(s.buildings.boiler.fuel + 10, 100) } },
+    };
+  }),
+
+  // Přiložit dřevo: 2 dřevo → +6 paliva (méně efektivní)
+  stokeWood: () => set(s => {
+    if (s.resources.wood < 2) return s;
+    return {
+      resources: { ...s.resources, wood: s.resources.wood - 2 },
+      buildings: { ...s.buildings, boiler: { ...s.buildings.boiler, fuel: Math.min(s.buildings.boiler.fuel + 6, 100) } },
     };
   }),
 
   buildBuilding: (name) => set(s => {
     const costs = {
+      collector:  { scrap: 15 },
       dynamo:     { scrap: 50, parts: 10 },
+      distillery: { scrap: 30, parts: 8, wood: 10 },
       greenhouse: { wood: 30, scrap: 15 },
-      distillery: { scrap: 20, parts: 5 },
       workshop:   { scrap: 40, wood: 20, parts: 8 },
     };
     const cost = costs[name];
@@ -110,54 +109,47 @@ export const useGameStore = create((set, get) => ({
     };
   }),
 
-  // Hlavní herní tick
+  // ─── HERNÍ TICK ────────────────────────────────────────────────────────────
+
   gameTick: () => set(s => {
     if (s.paused) return s;
 
     const tick = s.tick + 1;
     const cyclePos = tick % TOTAL_CYCLE;
-    const prevCyclePos = (tick - 1) % TOTAL_CYCLE;
 
-    // Fáze
     const phase = cyclePos < DAY_TICKS ? 'day' : 'night';
-    const prevPhase = prevCyclePos < DAY_TICKS ? 'day' : 'night';
-    const phaseChanged = phase !== prevPhase;
 
-    // Herní čas
     let timeOfDay;
     if (phase === 'day') {
       timeOfDay = 360 + Math.floor((cyclePos / DAY_TICKS) * 960);
     } else {
-      const nightPos = cyclePos - DAY_TICKS;
-      timeOfDay = (1320 + Math.floor((nightPos / NIGHT_TICKS) * 480)) % 1440;
+      timeOfDay = (1320 + Math.floor(((cyclePos - DAY_TICKS) / NIGHT_TICKS) * 480)) % 1440;
     }
 
-    // Nový den
     const dayNumber = s.dayNumber + (cyclePos === 0 ? 1 : 0);
 
-    // Kotel: spotřeba 1 palivo každých 30 tiků
+    // Kotel: -1 palivo každých 30 tiků
     const boiler = { ...s.buildings.boiler };
     if (tick % 30 === 0 && boiler.fuel > 0) {
       boiler.fuel = Math.max(0, boiler.fuel - 1);
     }
     const boilerActive = boiler.fuel > 0;
+    const { dynamo, collector, distillery, greenhouse } = s.buildings;
 
-    // Suroviny
-    let resources = { ...s.resources };
-
-    // Noční loot — jednou za noc, na začátku noci
+    // Noční loot
     let nightLootGiven = s.nightLootGiven;
     const messages = [...s.messages];
+    let resources = { ...s.resources };
 
     if (phase === 'night' && !nightLootGiven) {
-      // Variace ±20%
-      const variance = () => 0.8 + Math.random() * 0.4;
+      const v = () => 0.8 + Math.random() * 0.4;
       const loot = {
-        scrap: Math.round(NIGHT_LOOT.scrap * variance()),
-        wood:  Math.round(NIGHT_LOOT.wood  * variance()),
-        coal:  Math.round(NIGHT_LOOT.coal  * variance()),
-        parts: Math.round(NIGHT_LOOT.parts * variance()),
+        scrap: Math.round(NIGHT_LOOT.scrap * v()),
+        wood:  Math.round(NIGHT_LOOT.wood  * v()),
+        coal:  Math.round(NIGHT_LOOT.coal  * v()),
+        parts: Math.round(NIGHT_LOOT.parts * v()),
       };
+      const waterGain = Math.round(NIGHT_LOOT.water * v());
       resources = {
         scrap: resources.scrap + loot.scrap,
         wood:  resources.wood  + loot.wood,
@@ -165,77 +157,74 @@ export const useGameStore = create((set, get) => ({
         parts: resources.parts + loot.parts,
       };
       nightLootGiven = true;
-      const id = Date.now();
       messages.unshift({
-        id,
-        text: `Výprava se vrátila: +${loot.scrap} šrot, +${loot.wood} dřevo, +${loot.coal} uhlí, +${loot.parts} součástky`,
+        id: Date.now(),
+        text: `Výprava přinesla: +${loot.scrap} šrot, +${loot.wood} dřevo, +${loot.coal} uhlí, +${loot.parts} součástky, +${waterGain} vody`,
         type: 'loot',
+        waterGain, // zpracuje se dole ve stats
       });
     }
+    if (phase === 'day' && nightLootGiven) nightLootGiven = false;
 
-    if (phase === 'day' && nightLootGiven) {
-      nightLootGiven = false;
-    }
+    // Zjistit water gain z looту
+    const lootWater = (phase === 'night' && messages[0]?.waterGain) ? messages[0].waterGain : 0;
 
-    // Decay statů
+    // Stats
     const stats = { ...s.stats };
-    const { dynamo, greenhouse, distillery } = s.buildings;
 
     // TEPLO
-    if (boilerActive) {
-      stats.heat = Math.min(100, stats.heat + 0.04);
-    } else {
-      stats.heat = Math.max(0, stats.heat - 0.08);
+    stats.heat = boilerActive
+      ? Math.min(100, stats.heat + 0.04)
+      : Math.max(0,   stats.heat - 0.08);
+
+    // JÍDLO
+    stats.food = Math.max(0, stats.food - (greenhouse.built ? 0.015 : 0.03));
+
+    // VODA — zdroje:
+    // 1) Sběrač kondenzátu: +0.02/tick když kotel topí
+    // 2) Destilérka: +0.035/tick navíc, jen když kotel topí
+    // 3) Noční loot: jednorázový boost
+    // Bez zdrojů: -0.025/tick
+    {
+      const waterSources =
+        (collector.built  && boilerActive ? 0.02  : 0) +
+        (distillery.built && boilerActive ? 0.035 : 0);
+      const waterDecay = 0.025;
+      const net = waterSources - waterDecay;
+      stats.water = Math.min(100, Math.max(0, stats.water + net + lootWater));
     }
 
-    // JÍDLO — pěstírna zpomaluje spotřebu
-    const foodDecay = greenhouse.built ? 0.015 : 0.03;
-    stats.food = Math.max(0, stats.food - foodDecay);
-
-    // VODA — lihovar pomalu vyrábí vodu
-    if (distillery.built) {
-      stats.water = Math.min(100, stats.water + 0.01);
-    } else {
-      stats.water = Math.max(0, stats.water - 0.025);
-    }
-
-    // ENERGIE — dynamo generuje, jinak klesá
-    if (dynamo.built) {
-      stats.power = Math.min(100, stats.power + 0.03);
-    } else {
-      stats.power = Math.max(0, stats.power - 0.01);
-    }
+    // ENERGIE
+    stats.power = dynamo.built
+      ? Math.min(100, stats.power + 0.03)
+      : Math.max(0,   stats.power - 0.01);
 
     // ZDRAVÍ
-    const healthDecay =
+    const hDecay =
       (stats.heat  < 20 ? 0.05 : 0) +
       (stats.food  < 10 ? 0.08 : 0) +
       (stats.water < 10 ? 0.06 : 0);
-    if (healthDecay > 0) {
-      stats.health = Math.max(0, stats.health - healthDecay);
+    if (hDecay > 0) {
+      stats.health = Math.max(0, stats.health - hDecay);
     } else if (stats.heat > 40 && stats.food > 30 && stats.water > 30) {
       stats.health = Math.min(100, stats.health + 0.005);
     }
 
-    // Varování při nízkém palivu (jednou)
+    // Varování — jen při přechodu
     if (boiler.fuel === 10 && s.buildings.boiler.fuel > 10) {
-      const id = Date.now() + 1;
-      messages.unshift({ id, text: 'Kotel má málo paliva! Přiložte uhlí.', type: 'warning' });
+      messages.unshift({ id: Date.now() + 1, text: 'Kotel má málo paliva! Přiložte.', type: 'warning' });
     }
     if (!boilerActive && s.buildings.boiler.fuel > 0) {
-      const id = Date.now() + 2;
-      messages.unshift({ id, text: 'Kotel zhasl! Teplo začíná klesat.', type: 'warning' });
+      messages.unshift({ id: Date.now() + 2, text: 'Kotel zhasl! Teplo začíná klesat.', type: 'warning' });
+    }
+    if (stats.water < 15 && s.stats.water >= 15) {
+      messages.unshift({ id: Date.now() + 3, text: 'Dochází voda! Postavte sběrač kondenzátu.', type: 'warning' });
     }
 
     return {
-      tick,
-      dayNumber,
-      phase,
-      timeOfDay,
-      nightLootGiven,
-      stats,
-      resources,
-      messages: messages.slice(0, 8),
+      tick, dayNumber, phase, timeOfDay, nightLootGiven,
+      stats, resources,
+      messages: messages.slice(0, 10),
       buildings: { ...s.buildings, boiler },
     };
   }),

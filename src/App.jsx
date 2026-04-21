@@ -1,9 +1,9 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import {
   Settings, Heart, Utensils, Flame, Droplets, Zap,
   Hammer, Wrench, Box, Cog, Map, User,
-  Thermometer, Wind, CheckSquare, Square, Moon, Sun,
-  PauseCircle, PlayCircle, AlertTriangle, Package
+  Wind, CheckSquare, Square, Moon, Sun,
+  PauseCircle, PlayCircle, AlertTriangle, Package, Waves
 } from 'lucide-react';
 import { useGameStore } from './store/gameStore';
 import { useGameLoop } from './hooks/useGameLoop';
@@ -286,7 +286,7 @@ const Boiler = ({ fuel, heat, onClick }) => {
 
 // ─── BUILD NODE ──────────────────────────────────────────────────────────────
 
-const BuildNode = ({ title, icon, onClick, built, effect }) => (
+const BuildNode = ({ title, icon, onClick, built, effect, effectMuted }) => (
   <div
     className="group flex flex-col items-center cursor-pointer transform hover:scale-105 transition-transform select-none"
     onClick={onClick}
@@ -304,9 +304,9 @@ const BuildNode = ({ title, icon, onClick, built, effect }) => (
       {title}
     </div>
     <div className={`text-[10px] px-2 py-0.5 rounded-full border ${
-      built
-        ? 'bg-green-900/60 text-green-400 border-green-700/50'
-        : 'bg-stone-900/50 text-stone-500 border-stone-700/50'
+      !built        ? 'bg-stone-900/50 text-stone-500 border-stone-700/50' :
+      effectMuted   ? 'bg-stone-900/50 text-stone-600 border-stone-700/30' :
+                      'bg-green-900/60 text-green-400 border-green-700/50'
     }`}>
       {built ? effect : 'STAVĚT'}
     </div>
@@ -338,7 +338,7 @@ const Pipe = ({ active, style, className }) => (
 
 const GameCanvas = () => {
   const { buildings, setActiveModal, phase, stats } = useGameStore();
-  const { boiler, dynamo, greenhouse, distillery } = buildings;
+  const { boiler, dynamo, greenhouse, distillery, collector } = buildings;
   const boilerActive = boiler.fuel > 0;
 
   return (
@@ -431,25 +431,27 @@ const GameCanvas = () => {
           />
         </div>
 
-        {/* Lihovar — vlevo nahoře */}
+        {/* Sběrač kondenzátu — vlevo nahoře */}
         <div className="absolute" style={{ top: '12%', left: '8%' }}>
           <BuildNode
-            title="LIHOVAR"
-            built={distillery.built}
-            effect="💧 +VODA"
-            icon={<Droplets size={28} className={distillery.built ? 'text-blue-400' : 'text-stone-500 group-hover:text-blue-400'} />}
-            onClick={() => setActiveModal('build_distillery')}
+            title="SBĚRAČ"
+            built={collector.built}
+            effect={collector.built && !boilerActive ? '💧 čeká na kotel' : '💧 +VODA'}
+            effectMuted={collector.built && !boilerActive}
+            icon={<Waves size={28} className={collector.built ? (boilerActive ? 'text-blue-400' : 'text-blue-700') : 'text-stone-500 group-hover:text-blue-400'} />}
+            onClick={() => setActiveModal('build_collector')}
           />
         </div>
 
-        {/* Workshop — vpravo nahoře */}
+        {/* Destilérka — vpravo nahoře (upgrade vody) */}
         <div className="absolute" style={{ top: '12%', right: '8%' }}>
           <BuildNode
-            title="DÍLNA"
-            built={buildings.workshop.built}
-            effect="🔧 CRAFT"
-            icon={<Wrench size={28} className={buildings.workshop.built ? 'text-amber-400' : 'text-stone-500 group-hover:text-amber-400'} />}
-            onClick={() => setActiveModal('build_workshop')}
+            title="DESTILÉRKA"
+            built={distillery.built}
+            effect={distillery.built && !boilerActive ? '💧 čeká na kotel' : '💧💧 +VODA+'}
+            effectMuted={distillery.built && !boilerActive}
+            icon={<Droplets size={28} className={distillery.built ? (boilerActive ? 'text-cyan-400' : 'text-cyan-800') : 'text-stone-500 group-hover:text-cyan-400'} />}
+            onClick={() => setActiveModal('build_distillery')}
           />
         </div>
       </div>
@@ -488,11 +490,12 @@ const BottomBar = () => {
         <div className="text-[10px] text-amber-700 font-mono mb-1 font-bold tracking-widest">STAVBY</div>
         <div className="flex space-x-1.5 bg-stone-900 p-1 rounded-lg border border-stone-800">
           {[
-            { Icon: Flame,     label: 'Kotel',    modal: 'boiler'          },
-            { Icon: Zap,       label: 'Dynamo',   modal: 'build_dynamo'    },
-            { Icon: Wind,      label: 'Pěstírna', modal: 'build_greenhouse'},
-            { Icon: Droplets,  label: 'Lihovar',  modal: 'build_distillery'},
-            { Icon: Wrench,    label: 'Dílna',    modal: 'build_workshop'  },
+            { Icon: Flame,    label: 'Kotel',    modal: 'boiler'           },
+            { Icon: Waves,    label: 'Sběrač',   modal: 'build_collector'  },
+            { Icon: Droplets, label: 'Destilérka', modal: 'build_distillery'},
+            { Icon: Zap,      label: 'Dynamo',   modal: 'build_dynamo'     },
+            { Icon: Wind,     label: 'Pěstírna', modal: 'build_greenhouse' },
+            { Icon: Wrench,   label: 'Dílna',    modal: 'build_workshop'   },
           ].map(({ Icon, label, modal }) => (
             <button
               key={modal}
@@ -518,16 +521,17 @@ const BottomBar = () => {
 // ─── MODAL ───────────────────────────────────────────────────────────────────
 
 const BUILDING_DEFS = {
-  dynamo:     { title: 'DYNAMO',    desc: 'Spaluje přebytečné palivo a vyrábí elektřinu. Zastaví pokles energie a pomalu ji dobíjí.',        costs: { scrap: 50, parts: 10 } },
-  greenhouse: { title: 'PĚSTÍRNA', desc: 'Hydroponická zahrada. Snižuje spotřebu jídla na polovinu — nezávislost na nočním scavengingu.',   costs: { wood: 30, scrap: 15 } },
-  distillery: { title: 'LIHOVAR',  desc: 'Destiluje vodu z okolního vzduchu a nečistot. Pomalu doplňuje zásobu vody i bez donášky.',        costs: { scrap: 20, parts: 5 } },
-  workshop:   { title: 'DÍLNA',    desc: 'Umožní vyrábět pokročilé komponenty a opravovat zařízení. Odemkne craftingové menu.',              costs: { scrap: 40, wood: 20, parts: 8 } },
+  collector:  { title: 'SBĚRAČ KONDENZÁTU', desc: 'Zachytává páru z kotle a kondenzuje ji na pitnou vodu. Funguje jen když kotel topí. Levný první krok k soběstačnosti.', costs: { scrap: 15 } },
+  dynamo:     { title: 'DYNAMO',            desc: 'Spaluje přebytečné palivo a vyrábí elektřinu. Zastaví pokles energie a pomalu ji dobíjí.', costs: { scrap: 50, parts: 10 } },
+  distillery: { title: 'DESTILÉRKA',        desc: 'Pokročilá destilace — výrazně více vody než sběrač. Vyžaduje funkční kotel. Staví se po sběrači jako upgrade.', costs: { scrap: 30, parts: 8, wood: 10 } },
+  greenhouse: { title: 'PĚSTÍRNA',          desc: 'Hydroponická zahrada. Snižuje spotřebu jídla na polovinu — nezávislost na nočním scavengingu.', costs: { wood: 30, scrap: 15 } },
+  workshop:   { title: 'DÍLNA',             desc: 'Umožní vyrábět pokročilé komponenty a opravovat zařízení. Odemkne craftingové menu.', costs: { scrap: 40, wood: 20, parts: 8 } },
 };
 
 const RESOURCE_LABELS = { scrap: 'Šrot', wood: 'Dřevo', coal: 'Uhlí', parts: 'Součástky' };
 
 const Modal = () => {
-  const { activeModal, setActiveModal, buildings, stokeBoiler, buildBuilding, resources, stats } = useGameStore();
+  const { activeModal, setActiveModal, buildings, stokeCoal, stokeWood, buildBuilding, resources, stats } = useGameStore();
   if (!activeModal) return null;
 
   const renderContent = () => {
@@ -549,24 +553,41 @@ const Modal = () => {
               <div className="text-2xl font-bold font-mono text-amber-400">{Math.round(stats.heat)}<span className="text-sm text-stone-500">%</span></div>
             </div>
           </div>
-          <p className="text-stone-400 text-xs">Kotel spotřebovává 1 palivo každých 30 minut. Jedno přiložení spotřebuje 1 uhlí a přidá 10 paliva.</p>
-          <div className="flex items-center justify-between bg-stone-950 p-3 rounded border border-stone-800">
-            <div className="text-sm">
-              <span className="text-stone-500">Uhlí na skladě: </span>
-              <span className={`font-bold font-mono ${resources.coal < 3 ? 'text-red-400' : 'text-amber-400'}`}>{resources.coal}</span>
+          <p className="text-stone-400 text-xs">Kotel spotřebovává 1 palivo každých 30 min. Uhlí je efektivnější — dřevo spálí rychleji a dá méně.</p>
+          <div className="space-y-2">
+            {/* Přiložit uhlí */}
+            <div className="flex items-center justify-between bg-stone-950 p-3 rounded border border-stone-800">
+              <div className="text-sm">
+                <div className="text-stone-400 text-xs mb-0.5">Uhlí <span className="text-stone-600">(1 ks → +10 paliva)</span></div>
+                <span className={`font-bold font-mono ${resources.coal < 3 ? 'text-red-400' : 'text-amber-400'}`}>{resources.coal} ks</span>
+              </div>
+              <button
+                onClick={() => stokeCoal()}
+                disabled={resources.coal < 1}
+                className="px-4 py-1.5 bg-amber-800 border border-amber-600 text-amber-100 font-bold hover:bg-amber-700 rounded transition disabled:opacity-40 disabled:cursor-not-allowed font-mono text-sm"
+              >
+                Přiložit uhlí
+              </button>
             </div>
-            <button
-              onClick={() => { stokeBoiler(); }}
-              disabled={resources.coal < 1}
-              className="px-5 py-2 bg-amber-800 border border-amber-600 text-amber-100 font-bold hover:bg-amber-700 rounded transition disabled:opacity-40 disabled:cursor-not-allowed font-mono text-sm"
-            >
-              Přiložit (+10)
-            </button>
+            {/* Přiložit dřevo */}
+            <div className="flex items-center justify-between bg-stone-950 p-3 rounded border border-stone-800">
+              <div className="text-sm">
+                <div className="text-stone-400 text-xs mb-0.5">Dřevo <span className="text-stone-600">(2 ks → +6 paliva)</span></div>
+                <span className={`font-bold font-mono ${resources.wood < 4 ? 'text-red-400' : 'text-stone-300'}`}>{resources.wood} ks</span>
+              </div>
+              <button
+                onClick={() => stokeWood()}
+                disabled={resources.wood < 2}
+                className="px-4 py-1.5 bg-stone-700 border border-stone-600 text-stone-200 font-bold hover:bg-stone-600 rounded transition disabled:opacity-40 disabled:cursor-not-allowed font-mono text-sm"
+              >
+                Přiložit dřevo
+              </button>
+            </div>
           </div>
-          {resources.coal < 3 && (
+          {resources.coal < 3 && resources.wood < 4 && (
             <div className="flex items-center gap-2 text-xs text-orange-400 bg-orange-950/30 border border-orange-800/40 rounded p-2">
               <AlertTriangle size={14} />
-              Uhlí dochází. Výprava ho přinese v noci.
+              Dochází palivo! Výprava přinese zásoby v noci.
             </div>
           )}
         </div>
@@ -621,12 +642,13 @@ const Modal = () => {
   };
 
   const titleMap = {
-    boiler: '⚙ HLAVNÍ KOTEL',
-    build_dynamo: '⚡ DYNAMO',
-    build_greenhouse: '🌱 PĚSTÍRNA',
-    build_distillery: '💧 LIHOVAR',
-    build_workshop: '🔧 DÍLNA',
-    map: '🗺 MAPA OKOLÍ',
+    boiler:            '⚙ HLAVNÍ KOTEL',
+    build_collector:   '💧 SBĚRAČ KONDENZÁTU',
+    build_dynamo:      '⚡ DYNAMO',
+    build_distillery:  '💧 DESTILÉRKA',
+    build_greenhouse:  '🌱 PĚSTÍRNA',
+    build_workshop:    '🔧 DÍLNA',
+    map:               '🗺 MAPA OKOLÍ',
   };
 
   return (
