@@ -1015,36 +1015,6 @@ const Modal = () => {
             • Tlak &gt;8 bar = nebezpečí
             • Zanášení snižuje výkon
           </div>
-          <div className="space-y-2">
-            {/* Přiložit uhlí */}
-            <div className="flex items-center justify-between bg-stone-950 p-3 rounded border border-stone-800">
-              <div className="text-sm">
-                <div className="text-stone-400 text-xs mb-0.5">Uhlí <span className="text-stone-600">(1 ks → +10 paliva)</span></div>
-                <span className={`font-bold font-mono ${resources.coal < 3 ? 'text-red-400' : 'text-amber-400'}`}>{resources.coal} ks</span>
-              </div>
-              <button
-                onClick={() => stokeCoal()}
-                disabled={resources.coal < 1}
-                className="px-4 py-1.5 bg-amber-800 border border-amber-600 text-amber-100 font-bold hover:bg-amber-700 rounded transition disabled:opacity-40 disabled:cursor-not-allowed font-mono text-sm"
-              >
-                Přiložit uhlí
-              </button>
-            </div>
-            {/* Přiložit dřevo */}
-            <div className="flex items-center justify-between bg-stone-950 p-3 rounded border border-stone-800">
-              <div className="text-sm">
-                <div className="text-stone-400 text-xs mb-0.5">Dřevo <span className="text-stone-600">(2 ks → +6 paliva)</span></div>
-                <span className={`font-bold font-mono ${resources.wood < 4 ? 'text-red-400' : 'text-stone-300'}`}>{resources.wood} ks</span>
-              </div>
-              <button
-                onClick={() => stokeWood()}
-                disabled={resources.wood < 2}
-                className="px-4 py-1.5 bg-stone-700 border border-stone-600 text-stone-200 font-bold hover:bg-stone-600 rounded transition disabled:opacity-40 disabled:cursor-not-allowed font-mono text-sm"
-              >
-                Přiložit dřevo
-              </button>
-            </div>
-          </div>
           {resources.coal < 3 && resources.wood < 4 && (
             <div className="flex items-center gap-2 text-xs text-orange-400 bg-orange-950/30 border border-orange-800/40 rounded p-2">
               <AlertTriangle size={14} />
