@@ -1,14 +1,38 @@
 import { create } from 'zustand';
 import {
   PIPE_SLOTS, MATERIALS, NODE_MIN_PRESSURE,
-  REPAIR_COST, REPLACE_COST,
+  REPAIR_COST, REPLACE_COST, GASKET_CRAFT_COST,
 } from '../data/pipeSystem';
 
 const DAY_TICKS   = 480;
 const NIGHT_TICKS = 240;
 const TOTAL_CYCLE = DAY_TICKS + NIGHT_TICKS;
 
-const NIGHT_LOOT = { scrap: 35, wood: 18, coal: 7, parts: 3 };
+// Základní loot pro jasnou noc; modifikátory níže
+const BASE_NIGHT_LOOT = { scrap: 30, wood: 15, coal: 6, parts: 3 };
+
+// Multiplikátory lootu podle počasí
+const WEATHER_LOOT_MOD = {
+  clear: { scrap: 1.1, wood: 1.0, coal: 1.0, parts: 1.2, chemBonus: 0.0 },
+  frost: { scrap: 0.7, wood: 1.9, coal: 0.5, parts: 0.8, chemBonus: 0.0 },
+  rain:  { scrap: 0.9, wood: 0.8, coal: 1.0, parts: 1.0, chemBonus: 0.5 },
+  storm: { scrap: 0.5, wood: 0.5, coal: 0.4, parts: 0.4, chemBonus: 0.0 },
+};
+
+const WEATHER_LABELS = {
+  clear: 'Jasná noc ☀',
+  frost: 'Mrazivá noc ❄',
+  rain:  'Deštivá noc 🌧',
+  storm: 'Bouřlivá noc ⛈',
+};
+
+function rollWeather() {
+  const r = Math.random();
+  if (r < 0.40) return 'clear';
+  if (r < 0.70) return 'frost';
+  if (r < 0.90) return 'rain';
+  return 'storm';
+}
 
 export const TECH_PHASE_LABELS = [
   { phase: 1, label: 'Teplo',    fromDay: 1  },
@@ -47,6 +71,7 @@ export const useGameStore = create((set, get) => ({
   timeOfDay: 360,
   nightLootGiven: false,
   techPhase: 1,
+  weather: 'clear',
 
   // --- PAVEL ---
   hero: { name: 'Pavel', morale: 70, energy: 90 },
@@ -62,11 +87,11 @@ export const useGameStore = create((set, get) => ({
   stats: { health: 82, food: 70, heat: 60, water: 65, power: 40 },
 
   // --- SUROVINY ---
-  resources: { scrap: 312, wood: 145, coal: 24, parts: 12 },
+  resources: { scrap: 312, wood: 145, coal: 24, parts: 12, gaskets: 8, chemicals: 0 },
 
   // --- BUDOVY ---
   buildings: {
-    boiler:     { built: true,  level: 1, fuel: 24 },
+    boiler:     { built: true,  level: 1, fuel: 24, scale: 0 },
     collector:  { built: false, level: 0 },
     dynamo:     { built: false, level: 0 },
     distillery: { built: false, level: 0 },
@@ -103,6 +128,25 @@ export const useGameStore = create((set, get) => ({
   setTradeOffer:   (o) => set(s => ({ nadia: { ...s.nadia, tradeOffer: { ...s.nadia.tradeOffer, ...o } } })),
   clearNadiaNotification: () => set(s => ({ nadia: { ...s.nadia, notification: false } })),
   toggleTask: (id) => set(s => ({ tasks: s.tasks.map(t => t.id === id ? { ...t, done: !t.done } : t) })),
+
+  // Výroba těsnění: 3× šrot + 2× dřevo → 1× těsnění
+  craftGaskets: () => set(s => {
+    const res = { ...s.resources };
+    for (const [item, amount] of Object.entries(GASKET_CRAFT_COST)) {
+      if ((res[item] ?? 0) < amount) return s;
+      res[item] -= amount;
+    }
+    return { resources: { ...res, gaskets: (res.gaskets ?? 0) + 1 } };
+  }),
+
+  // Vyčistit kotel chemikálií: 1× chemikálie → scale = 0
+  cleanBoiler: () => set(s => {
+    if ((s.resources.chemicals ?? 0) < 1) return s;
+    return {
+      resources: { ...s.resources, chemicals: s.resources.chemicals - 1 },
+      buildings: { ...s.buildings, boiler: { ...s.buildings.boiler, scale: 0 } },
+    };
+  }),
 
   stokeCoal: () => set(s => {
     if (s.resources.coal < 1) return s;
@@ -271,8 +315,13 @@ export const useGameStore = create((set, get) => ({
     // Kotel
     const boiler = { ...s.buildings.boiler };
     if (tick % 30 === 0 && boiler.fuel > 0) boiler.fuel = Math.max(0, boiler.fuel - 1);
-    const boilerActive    = boiler.fuel > 0;
-    const boilerPressure  = boilerActive ? boiler.fuel : 0; // 0–100 bar
+    const boilerActive = boiler.fuel > 0;
+
+    // Zanášení (scale 0–100): každých 20 ticků +0.5 při provozu → max za ~5 dní
+    if (tick % 20 === 0 && boilerActive) boiler.scale = Math.min(100, (boiler.scale ?? 0) + 0.5);
+    // Efektivní tlak kotle je snížen zanášením (při scale 100 = 50 % výkonu)
+    const rawPressure    = boilerActive ? boiler.fuel : 0;
+    const boilerPressure = rawPressure * (1 - (boiler.scale ?? 0) * 0.005);
 
     let resources      = { ...s.resources };
     let nadia          = { ...s.nadia };
@@ -280,7 +329,14 @@ export const useGameStore = create((set, get) => ({
     let nightLootGiven = s.nightLootGiven;
     const messages     = [...s.messages];
     let inventory      = [...s.inventory];
+    let weather        = s.weather;
     const { dynamo, collector, distillery, greenhouse } = s.buildings;
+
+    // Počasí: generuje se na začátku každé noci
+    if (phaseJustChanged && phase === 'night') {
+      weather = rollWeather();
+      messages.unshift({ id: Date.now() + 20, text: `${WEATHER_LABELS[weather]} — Nadia vyrazila.`, type: 'info' });
+    }
 
     // ── Trubky: tlak + degradace ──────────────────────────────────────────────
     const newPipes = { ...s.pipes };
@@ -341,15 +397,27 @@ export const useGameStore = create((set, get) => ({
     }
 
     if (phaseJustChanged && phase === 'day' && nadia.met && nadia.status === 'out') {
-      const v = () => 0.8 + Math.random() * 0.4;
+      const mod = WEATHER_LOOT_MOD[weather] ?? WEATHER_LOOT_MOD.clear;
+      const v   = () => 0.8 + Math.random() * 0.4;
       const loot = {
-        scrap: Math.round(NIGHT_LOOT.scrap * v()),
-        wood:  Math.round(NIGHT_LOOT.wood  * v()),
-        coal:  Math.round(NIGHT_LOOT.coal  * v()),
-        parts: Math.round(NIGHT_LOOT.parts * v()),
+        scrap: Math.round(BASE_NIGHT_LOOT.scrap * mod.scrap * v()),
+        wood:  Math.round(BASE_NIGHT_LOOT.wood  * mod.wood  * v()),
+        coal:  Math.round(BASE_NIGHT_LOOT.coal  * mod.coal  * v()),
+        parts: Math.round(BASE_NIGHT_LOOT.parts * mod.parts * v()),
       };
-      const waterGain = Math.round(8 * v());
       for (const [k, v2] of Object.entries(loot)) resources[k] = (resources[k] ?? 0) + v2;
+
+      // Chemikálie — bonusová šance za deštivou noc
+      let chemMsg = '';
+      if (mod.chemBonus > 0 && Math.random() < mod.chemBonus) {
+        resources.chemicals = (resources.chemicals ?? 0) + 1;
+        chemMsg = ', +1 chemikálie';
+      }
+
+      // Mrazivá noc: Pavel prochladl
+      if (weather === 'frost' && boiler.fuel === 0) {
+        hero = { ...hero };
+      }
 
       let tradeMsg = '';
       if (nadia.pendingReturn) {
@@ -373,23 +441,24 @@ export const useGameStore = create((set, get) => ({
           : [...inventory, { id: Date.now(), ...found, qty: 1 }];
       }
 
+      const weatherLabel = { clear: 'Jasná', frost: 'Mrazivá', rain: 'Deštivá', storm: 'Bouřlivá' }[weather];
       messages.unshift({
         id: Date.now() + 12,
-        text: `Nadia se vrátila: +${loot.scrap} šrot, +${loot.wood} dřevo, +${loot.coal} uhlí, +${loot.parts} součástky, +${waterGain} vody${tradeMsg}`,
+        text: `[${weatherLabel}] Nadia se vrátila: +${loot.scrap} šrot, +${loot.wood} dřevo, +${loot.coal} uhlí, +${loot.parts} souč.${chemMsg}${tradeMsg}`,
         type: 'loot',
-        waterGain,
       });
       nadia = { ...nadia, status: 'home', pendingReturn: null, notification: true };
       nightLootGiven = true;
     }
 
     if (phase === 'night' && !nightLootGiven && !nadia.met) {
-      const v = () => 0.8 + Math.random() * 0.4;
+      const mod = WEATHER_LOOT_MOD[weather] ?? WEATHER_LOOT_MOD.clear;
+      const v   = () => 0.8 + Math.random() * 0.4;
       const loot = {
-        scrap: Math.round(NIGHT_LOOT.scrap * v()),
-        wood:  Math.round(NIGHT_LOOT.wood  * v()),
-        coal:  Math.round(NIGHT_LOOT.coal  * v()),
-        parts: Math.round(NIGHT_LOOT.parts * v()),
+        scrap: Math.round(BASE_NIGHT_LOOT.scrap * mod.scrap * v()),
+        wood:  Math.round(BASE_NIGHT_LOOT.wood  * mod.wood  * v()),
+        coal:  Math.round(BASE_NIGHT_LOOT.coal  * mod.coal  * v()),
+        parts: Math.round(BASE_NIGHT_LOOT.parts * mod.parts * v()),
       };
       for (const [k, v2] of Object.entries(loot)) resources[k] = (resources[k] ?? 0) + v2;
       nightLootGiven = true;
@@ -459,9 +528,15 @@ export const useGameStore = create((set, get) => ({
       messages.unshift({ id: Date.now() + 4, text: 'Pavel je na dně. Potřebuje teplo a společnost.', type: 'warning' });
     if (techPhase > s.techPhase)
       messages.unshift({ id: Date.now() + 5, text: `Nová fáze: ${TECH_PHASE_LABELS.find(t => t.phase === techPhase)?.label} — nové stavby dostupné!`, type: 'info' });
+    // Zanášení kotle
+    const prevScale = s.buildings.boiler.scale ?? 0;
+    if (boiler.scale >= 40 && prevScale < 40)
+      messages.unshift({ id: Date.now() + 6, text: 'Kotel se zanáší! Výkon klesl — vyčisti ho chemikáliemi.', type: 'warning' });
+    if (boiler.scale >= 80 && prevScale < 80)
+      messages.unshift({ id: Date.now() + 7, text: 'Kotel vážně zanesen! Tlak páry snížen na 60 % — naléhavé čištění!', type: 'warning' });
 
     return {
-      tick, dayNumber, phase, timeOfDay, nightLootGiven, techPhase,
+      tick, dayNumber, phase, timeOfDay, nightLootGiven, techPhase, weather,
       stats, hero, nadia, resources, inventory, pipes: newPipes,
       messages: messages.slice(0, 12),
       buildings: { ...s.buildings, boiler },

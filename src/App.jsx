@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useGameStore, BUILDING_PHASE, TECH_PHASE_LABELS } from './store/gameStore';
 import { useGameLoop } from './hooks/useGameLoop';
-import { PIPE_COORDS, PIPE_SLOTS, MATERIALS, NODE_MIN_PRESSURE, NODE_LABELS, REPAIR_COST, REPLACE_COST } from './data/pipeSystem';
+import { PIPE_COORDS, PIPE_SLOTS, MATERIALS, NODE_MIN_PRESSURE, NODE_LABELS, REPAIR_COST, REPLACE_COST, GASKET_CRAFT_COST } from './data/pipeSystem';
 
 function formatTime(minutes) {
   const h = Math.floor(minutes / 60) % 24;
@@ -105,10 +105,71 @@ const TopBar = () => {
         <ResourceItem icon={<Box  size={15} />} label="Dřevo"      value={resources.wood}  />
         <ResourceItem icon={<Flame size={15} className="text-orange-600" />} label="Uhlí" value={resources.coal} low={resources.coal < 5} />
         <ResourceItem icon={<Wrench size={15} />} label="Součástky" value={resources.parts} />
+        <ResourceItem icon={<span className="text-[11px]">⬡</span>} label="Těsnění"    value={resources.gaskets ?? 0} low={(resources.gaskets ?? 0) < 2} />
+        <ResourceItem icon={<span className="text-[11px]">⚗</span>} label="Chemikálie" value={resources.chemicals ?? 0} />
         <button className="p-1 hover:bg-stone-800 rounded transition border border-transparent hover:border-stone-600">
           <Settings size={18} className="text-stone-400" />
         </button>
       </div>
+    </div>
+  );
+};
+
+// ─── CRAFTING PANEL ──────────────────────────────────────────────────────────
+
+const CraftingPanel = ({ resources, craftGaskets }) => {
+  const canCraftGasket = (resources.scrap ?? 0) >= GASKET_CRAFT_COST.scrap && (resources.wood ?? 0) >= GASKET_CRAFT_COST.wood;
+
+  const LOCKED_RECIPES = [
+    { name: 'Obvaz',      icon: '🩹', cost: 'šrot ×5',            desc: 'Obnoví trochu zdraví' },
+    { name: 'Svíčka',     icon: '🕯',  cost: 'dřevo ×2',           desc: 'Světlo a teplo' },
+    { name: 'Filtr vody', icon: '💧', cost: 'šrot ×10, dřevo ×3', desc: 'Čistí kontaminovanou vodu' },
+  ];
+
+  return (
+    <div className="space-y-2">
+      <div className="text-[10px] text-stone-600 uppercase tracking-wider mb-2">Dostupné recepty</div>
+
+      {/* Těsnění — vždy dostupné */}
+      <div className="bg-stone-950 border border-stone-800 rounded p-2">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <span className="text-base leading-none">⬡</span>
+            <span className="text-xs font-bold text-stone-300">Těsnění</span>
+          </div>
+          <button
+            onClick={craftGaskets}
+            disabled={!canCraftGasket}
+            className="px-2 py-0.5 bg-amber-900/40 border border-amber-700/50 text-amber-300 text-[10px] font-mono rounded hover:bg-amber-900/70 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Vyrobit
+          </button>
+        </div>
+        <div className="text-[10px] text-stone-600">
+          {GASKET_CRAFT_COST.scrap}× šrot + {GASKET_CRAFT_COST.wood}× dřevo → 1× těsnění
+        </div>
+        <div className="text-[10px] text-stone-500 mt-0.5">Nutné pro měděné a ocelové trubky.</div>
+        <div className="flex gap-2 mt-1">
+          <span className={`text-[9px] ${(resources.scrap ?? 0) >= GASKET_CRAFT_COST.scrap ? 'text-stone-500' : 'text-red-500'}`}>
+            šrot: {resources.scrap ?? 0}
+          </span>
+          <span className={`text-[9px] ${(resources.wood ?? 0) >= GASKET_CRAFT_COST.wood ? 'text-stone-500' : 'text-red-500'}`}>
+            dřevo: {resources.wood ?? 0}
+          </span>
+        </div>
+      </div>
+
+      <div className="text-[10px] text-stone-700 uppercase tracking-wider mt-3 mb-1">Vyžaduje dílnu</div>
+      {LOCKED_RECIPES.map(r => (
+        <div key={r.name} className="bg-stone-950 border border-stone-800/50 rounded p-2 opacity-50">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span>{r.icon}</span>
+            <span className="text-xs font-bold text-stone-500">{r.name}</span>
+          </div>
+          <div className="text-[10px] text-stone-700">{r.cost}</div>
+          <div className="text-[10px] text-stone-700 italic">{r.desc}</div>
+        </div>
+      ))}
     </div>
   );
 };
@@ -127,10 +188,12 @@ const LeftSidebar = () => {
   // Suroviny jako první řada inventáře
   const { resources } = useGameStore();
   const resourceSlots = [
-    { key: 'scrap', icon: <Cog   size={16} className="text-stone-400" />, label: 'Šrot',       value: resources.scrap },
-    { key: 'wood',  icon: <Box   size={16} className="text-amber-700" />, label: 'Dřevo',      value: resources.wood  },
-    { key: 'coal',  icon: <Flame size={16} className="text-orange-600"/>, label: 'Uhlí',       value: resources.coal  },
-    { key: 'parts', icon: <Wrench size={16} className="text-blue-500"  />, label: 'Součástky', value: resources.parts },
+    { key: 'scrap',     icon: <Cog    size={16} className="text-stone-400"  />, label: 'Šrot',       value: resources.scrap        },
+    { key: 'wood',      icon: <Box    size={16} className="text-amber-700"  />, label: 'Dřevo',      value: resources.wood         },
+    { key: 'coal',      icon: <Flame  size={16} className="text-orange-600" />, label: 'Uhlí',       value: resources.coal         },
+    { key: 'parts',     icon: <Wrench size={16} className="text-blue-500"   />, label: 'Součástky',  value: resources.parts        },
+    { key: 'gaskets',   icon: <span className="text-[13px]">⬡</span>,           label: 'Těsnění',    value: resources.gaskets  ?? 0 },
+    { key: 'chemicals', icon: <span className="text-[13px]">⚗</span>,           label: 'Chemikálie', value: resources.chemicals ?? 0 },
   ];
 
   return (
@@ -262,24 +325,7 @@ const LeftSidebar = () => {
 
         {/* CRAFTING */}
         {activeLeftTab === 'crafting' && (
-          <div className="space-y-2">
-            <div className="text-[10px] text-stone-600 uppercase tracking-wider mb-2">Dostupné recepty</div>
-            {[
-              { name: 'Obvaz',       icon: '🩹', cost: 'šrot ×5',             desc: 'Obnoví trochu zdraví' },
-              { name: 'Svíčka',      icon: '🕯',  cost: 'dřevo ×2',            desc: 'Světlo a teplo' },
-              { name: 'Filtr vody',  icon: '💧', cost: 'šrot ×10, dřevo ×3',  desc: 'Čistí kontaminovanou vodu' },
-            ].map(r => (
-              <div key={r.name} className="bg-stone-950 border border-stone-800 rounded p-2 opacity-60">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span>{r.icon}</span>
-                  <span className="text-xs font-bold text-stone-400">{r.name}</span>
-                </div>
-                <div className="text-[10px] text-stone-600">{r.cost}</div>
-                <div className="text-[10px] text-stone-700 italic">{r.desc}</div>
-                <div className="text-[9px] text-amber-800 mt-1">Vyžaduje: Dílna</div>
-              </div>
-            ))}
-          </div>
+          <CraftingPanel resources={resources} craftGaskets={craftGaskets} />
         )}
 
       </div>
@@ -687,9 +733,17 @@ const ActionButton = ({ icon, label, onClick, highlight }) => (
   </button>
 );
 
+const WEATHER_INFO = {
+  clear: { icon: '☀', label: 'Jasno',   color: 'text-amber-400' },
+  frost: { icon: '❄', label: 'Mráz',    color: 'text-blue-300'  },
+  rain:  { icon: '🌧', label: 'Déšť',   color: 'text-blue-400'  },
+  storm: { icon: '⛈', label: 'Bouřka', color: 'text-purple-400' },
+};
+
 const BottomBar = () => {
-  const { setActiveModal, phase, techPhase } = useGameStore();
+  const { setActiveModal, phase, techPhase, weather } = useGameStore();
   const techLabel = TECH_PHASE_LABELS.find(t => t.phase === techPhase);
+  const wInfo = WEATHER_INFO[weather] ?? WEATHER_INFO.clear;
   return (
     <div className="bg-stone-950 border-t-2 border-amber-900/50 p-2 flex items-center justify-between z-10 flex-shrink-0">
       <div className="flex items-center gap-3 pl-2">
@@ -698,6 +752,9 @@ const BottomBar = () => {
             ? <span className="text-blue-500">◆ NOC</span>
             : <span className="text-amber-700">◆ DEN</span>
           }
+        </span>
+        <span className={`text-xs font-mono ${wInfo.color}`} title="Počasí">
+          {wInfo.icon} {wInfo.label}
         </span>
         {/* Tech fáze badge */}
         <button
@@ -752,7 +809,7 @@ const BUILDING_DEFS = {
   workshop:   { title: 'DÍLNA',             desc: 'Umožní vyrábět pokročilé komponenty a opravovat zařízení. Odemkne craftingové menu.', costs: { scrap: 40, wood: 20, parts: 8 } },
 };
 
-const RESOURCE_LABELS = { scrap: 'Šrot', wood: 'Dřevo', coal: 'Uhlí', parts: 'Součástky' };
+const RESOURCE_LABELS = { scrap: 'Šrot', wood: 'Dřevo', coal: 'Uhlí', parts: 'Součástky', gaskets: 'Těsnění', chemicals: 'Chemikálie' };
 
 // Mini stat bar pro postavy
 const MiniBar = ({ value, color, label }) => {
@@ -769,30 +826,63 @@ const MiniBar = ({ value, color, label }) => {
 };
 
 const Modal = () => {
-  const { activeModal, setActiveModal, buildings, stokeCoal, stokeWood, buildBuilding, resources, stats, hero, nadia, setTradeOffer, techPhase, pipes, repairPipe, replacePipe, upgradePipe } = useGameStore();
+  const { activeModal, setActiveModal, buildings, stokeCoal, stokeWood, buildBuilding, resources, stats, hero, nadia, setTradeOffer, techPhase, pipes, repairPipe, replacePipe, upgradePipe, craftGaskets, cleanBoiler } = useGameStore();
   const [tradeInput, setTradeInput] = useState({ scrap: 0, wood: 0, coal: 0, parts: 0 });
   if (!activeModal) return null;
 
   const renderContent = () => {
     // Kotel
     if (activeModal === 'boiler') {
-      const { fuel } = buildings.boiler;
+      const { fuel, scale = 0 } = buildings.boiler;
+      const scalePct = Math.round(scale);
+      const scaleColor = scalePct < 40 ? 'bg-green-700' : scalePct < 70 ? 'bg-amber-600' : 'bg-red-600';
+      const effectivePressure = Math.round(fuel * (1 - scale * 0.005));
       return (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             <div className="bg-stone-950 rounded p-3 border border-stone-800">
               <div className="text-[10px] text-stone-500 font-mono mb-1">PALIVO</div>
-              <div className={`text-2xl font-bold font-mono ${fuel < 15 ? 'text-red-400' : 'text-amber-400'}`}>{fuel}<span className="text-sm text-stone-500"> / 100</span></div>
-              <div className="w-full h-2 bg-stone-900 rounded mt-2 overflow-hidden">
+              <div className={`text-xl font-bold font-mono ${fuel < 15 ? 'text-red-400' : 'text-amber-400'}`}>{fuel}<span className="text-xs text-stone-500"> / 100</span></div>
+              <div className="w-full h-1.5 bg-stone-900 rounded mt-1.5 overflow-hidden">
                 <div className={`h-full transition-all ${fuel > 30 ? 'bg-amber-600' : fuel > 10 ? 'bg-orange-600' : 'bg-red-700'}`} style={{ width: `${fuel}%` }} />
               </div>
             </div>
             <div className="bg-stone-950 rounded p-3 border border-stone-800">
               <div className="text-[10px] text-stone-500 font-mono mb-1">TEPLO</div>
-              <div className="text-2xl font-bold font-mono text-amber-400">{Math.round(stats.heat)}<span className="text-sm text-stone-500">%</span></div>
+              <div className="text-xl font-bold font-mono text-amber-400">{Math.round(stats.heat)}<span className="text-xs text-stone-500">%</span></div>
+            </div>
+            <div className="bg-stone-950 rounded p-3 border border-stone-800">
+              <div className="text-[10px] text-stone-500 font-mono mb-1">TLAK</div>
+              <div className={`text-xl font-bold font-mono ${effectivePressure < 40 ? 'text-red-400' : 'text-cyan-400'}`}>{effectivePressure}<span className="text-xs text-stone-500"> bar</span></div>
             </div>
           </div>
-          <p className="text-stone-400 text-xs">Kotel spotřebovává 1 palivo každých 30 min. Uhlí je efektivnější — dřevo spálí rychleji a dá méně.</p>
+
+          {/* Zanášení */}
+          <div className="bg-stone-950 rounded p-3 border border-stone-800">
+            <div className="flex justify-between items-center mb-1.5">
+              <div className="text-[10px] text-stone-500 font-mono tracking-wider">ZANÁŠENÍ KOTLE</div>
+              <div className={`text-xs font-bold font-mono ${scalePct < 40 ? 'text-green-400' : scalePct < 70 ? 'text-amber-400' : 'text-red-400 animate-pulse'}`}>
+                {scalePct} %
+              </div>
+            </div>
+            <div className="w-full h-2.5 bg-stone-900 rounded overflow-hidden border border-stone-800 mb-2">
+              <div className={`h-full transition-all ${scaleColor}`} style={{ width: `${scalePct}%` }} />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="text-[9px] text-stone-600">
+                {scalePct < 40 ? 'Čistý — výkon 100 %' : scalePct < 70 ? 'Mírné zanášení — výkon snížen' : 'Vážné zanášení — tlak kritický!'}
+              </div>
+              <button
+                onClick={() => { cleanBoiler(); }}
+                disabled={(resources.chemicals ?? 0) < 1}
+                className="px-3 py-1 bg-teal-900/40 border border-teal-700/60 text-teal-300 text-[10px] font-mono rounded hover:bg-teal-900/70 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                ⚗ Vyčistit (1× chemikálie)
+              </button>
+            </div>
+          </div>
+
+          <p className="text-stone-400 text-xs">Kotel spotřebovává 1 palivo každých 30 min. Zanášení snižuje tlak páry — chemikálie ho resetují.</p>
           <div className="space-y-2">
             {/* Přiložit uhlí */}
             <div className="flex items-center justify-between bg-stone-950 p-3 rounded border border-stone-800">

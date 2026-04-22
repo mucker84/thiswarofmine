@@ -6,8 +6,7 @@ export const PIPE_SLOTS = {
   boiler_distillery: { from: 'boiler', to: 'distillery', media: 'steam',     segments: 2 },
 };
 
-// SVG souřadnice v viewBox 160×90 (potrubí z kotle k uzlům)
-// Kotel je uprostřed (~80,44), horní výstup ~25, dolní ~62
+// SVG souřadnice v viewBox 160×90
 export const PIPE_COORDS = {
   boiler_collector:  { x1: 77, y1: 26, x2: 18, y2: 22 },
   boiler_distillery: { x1: 83, y1: 26, x2: 142, y2: 22 },
@@ -19,32 +18,32 @@ export const MATERIALS = {
   wood: {
     label: 'Dřevěné',
     maxPressure: 30,
-    resistance: 7,      // bar ztráta / segment
-    degradation: 0.07,  // integrita / tick při provozu
+    resistance: 7,
+    degradation: 0.07,
     color: '#78350f',
     activeColor: '#92400e',
     strokeWidth: 1.0,
-    buildCost: { wood: 4 },
+    buildCost: { wood: 8, scrap: 4 },
   },
   copper: {
     label: 'Měděné',
-    maxPressure: 60,
+    maxPressure: 80,
     resistance: 3,
     degradation: 0.04,
     color: '#b45309',
     activeColor: '#d97706',
     strokeWidth: 1.3,
-    buildCost: { scrap: 15, parts: 3 },
+    buildCost: { scrap: 16, parts: 2, gaskets: 2 },
   },
   steel: {
     label: 'Ocelové',
-    maxPressure: 100,
+    maxPressure: 150,
     resistance: 1.5,
     degradation: 0.02,
     color: '#4b5563',
     activeColor: '#6b7280',
     strokeWidth: 1.6,
-    buildCost: { scrap: 30, parts: 8 },
+    buildCost: { scrap: 20, parts: 5, gaskets: 4 },
   },
 };
 
@@ -63,7 +62,9 @@ export const NODE_LABELS = {
   distillery: 'Destilérka',
 };
 
-// Oprava záplatou: levnější, ale sníží maxIntegrityCap
-export const REPAIR_COST = { scrap: 8, wood: 3 };
-// Plná výměna: drahší, plný reset
-export const REPLACE_COST = { scrap: 20, parts: 4 };
+// Záplata: levnější, sníží maxIntegrityCap
+export const REPAIR_COST   = { scrap: 5, gaskets: 1 };
+// Plná výměna: dražší, plný reset
+export const REPLACE_COST  = { scrap: 18, parts: 3, gaskets: 2 };
+// Výroba těsnění (bez dílny)
+export const GASKET_CRAFT_COST = { scrap: 3, wood: 2 };
