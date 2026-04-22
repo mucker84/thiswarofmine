@@ -99,6 +99,7 @@ export const useGameStore = create((set, get) => ({
 
   // --- ZÁSOBNÍK VODY (sudy) ---
   reservoirWater: 40,
+  waterBarrels: 1,
 
   // --- BUDOVY ---
   buildings: {
@@ -257,7 +258,65 @@ export const useGameStore = create((set, get) => ({
     const pipeId   = `boiler_${name}`;
     const newPipes = { ...s.pipes };
     if (PIPE_SLOTS[pipeId] && !newPipes[pipeId]) newPipes[pipeId] = newWoodPipe();
-    return { resources: res, buildings: { ...s.buildings, [name]: { built: true, level: 1 } }, pipes: newPipes };
+    const newLevel = name === 'collector' ? 1 : 1;
+    return { resources: res, buildings: { ...s.buildings, [name]: { built: true, level: newLevel } }, pipes: newPipes };
+  }),
+
+  buildBarrel: () => set(s => {
+    const cost = { scrap: 20, wood: 10 };
+    const res = { ...s.resources };
+    for (const [item, amount] of Object.entries(cost)) {
+      if ((res[item] ?? 0) < amount) return s;
+      res[item] -= amount;
+    }
+    return { resources: res, waterBarrels: s.waterBarrels + 1 };
+  }),
+
+  upgradeCollector: () => set(s => {
+    const collector = s.buildings.collector;
+    if (!collector.built) return s;
+    const cost = { scrap: 20, parts: 5 };
+    const res = { ...s.resources };
+    for (const [item, amount] of Object.entries(cost)) {
+      if ((res[item] ?? 0) < amount) return s;
+      res[item] -= amount;
+    }
+    return { 
+      resources: res, 
+      buildings: { ...s.buildings, collector: { ...collector, level: collector.level + 1 } }
+    };
+  }),
+
+  scavengeWoodOutside: () => set(s => {
+    const TicksCost = 90; // 3 hours
+    if (s.hero.energy < 20) return s; // Not enough energy
+
+    // Fast forward time
+    const cyclePos  = s.tick % TOTAL_CYCLE;
+    const inDay     = cyclePos < DAY_TICKS;
+    const remaining = inDay ? Math.min(TicksCost, DAY_TICKS - cyclePos) : Math.min(TicksCost, TOTAL_CYCLE - cyclePos);
+    
+    // Decrease energy drastically
+    const hero = { ...s.hero, energy: Math.max(0, s.hero.energy - 35) };
+    
+    // Loot
+    const lootWood = 2 + Math.floor(Math.random() * 4);
+    const lootChips = 5 + Math.floor(Math.random() * 10);
+    const resources = { ...s.resources, wood: (s.resources.wood ?? 0) + lootWood, chips: (s.resources.chips ?? 0) + lootChips };
+    
+    // Weather effects if bad weather
+    const stats = { ...s.stats };
+    if (s.phase === 'night' && (s.weather === 'frost' || s.weather === 'storm')) {
+      stats.health = Math.max(0, stats.health - 15);
+      stats.heat = Math.max(0, stats.heat - 20);
+    }
+
+    const messages = [{ id: Date.now(), text: `Návrat z výpravy: +${lootWood} dřevo, +${lootChips} štěpky (-3 hodiny).`, type: 'loot' }, ...s.messages].slice(0, 12);
+
+    return { 
+      tick: s.tick + remaining,
+      hero, resources, stats, messages
+    };
   }),
 
   skipPhase: () => set(s => {
@@ -365,8 +424,9 @@ export const useGameStore = create((set, get) => ({
     }
 
     if (rain.isRaining) {
-      const rate = s.buildings.collector?.built ? 0.5 : 0.15;
-      reservoirWater = Math.min(200, reservoirWater + rate);
+      const colLvl = s.buildings.collector?.level || 0;
+      const rate = colLvl > 0 ? 0.3 + (colLvl * 0.2) : 0.15;
+      reservoirWater = Math.min(s.waterBarrels * 100, reservoirWater + rate);
       rain = { ...rain, timeRemaining: rain.timeRemaining - 1 };
       if (rain.timeRemaining <= 0) {
         rain = { ...rain, isRaining: false, announced: false, nextRainIn: 1200 + Math.floor(Math.random() * 1200) };
@@ -375,7 +435,7 @@ export const useGameStore = create((set, get) => ({
     }
 
     // Noční kondenzát (základní, bez kolektoru)
-    if (phaseJustChanged && phase === 'night') reservoirWater = Math.min(200, reservoirWater + 4);
+    if (phaseJustChanged && phase === 'night') reservoirWater = Math.min(s.waterBarrels * 100, reservoirWater + 4);
 
     // Atmosférické rádiové zprávy (jednou denně)
     if (tick % DAY_TICKS === Math.floor(DAY_TICKS / 2)) {

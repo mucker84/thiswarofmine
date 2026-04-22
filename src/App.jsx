@@ -9,6 +9,7 @@ import {
 import { useGameStore, BUILDING_PHASE, TECH_PHASE_LABELS, FUEL_TYPES } from './store/gameStore';
 import { useGameLoop } from './hooks/useGameLoop';
 import { PIPE_COORDS, PIPE_SLOTS, MATERIALS, NODE_MIN_PRESSURE, NODE_LABELS, REPAIR_COST, REPLACE_COST, GASKET_CRAFT_COST } from './data/pipeSystem';
+import { Radio } from './components/Radio';
 
 function formatTime(minutes) {
   const h = Math.floor(minutes / 60) % 24;
@@ -329,25 +330,7 @@ const LeftSidebar = () => {
 
         {/* RÁDIO */}
         {activeLeftTab === 'radio' && (
-          <div className="space-y-2">
-            {radioMessages.length === 0 && <p className="text-stone-600 text-xs">Ticho.</p>}
-            {radioMessages.map(msg => (
-              <div
-                key={msg.id}
-                className={`text-xs p-2 rounded border leading-snug font-mono ${
-                  msg.type === 'weather'
-                    ? 'bg-blue-950/40 border-blue-800/60 text-blue-300'
-                    : msg.type === 'signal'
-                    ? 'bg-purple-950/40 border-purple-800/60 text-purple-300'
-                    : 'bg-stone-950/60 border-stone-800/40 text-stone-400'
-                }`}
-              >
-                {msg.type === 'weather' && <span className="text-blue-500">🌧 </span>}
-                {msg.type === 'signal'  && <span className="text-purple-500">📡 </span>}
-                {msg.text}
-              </div>
-            ))}
-          </div>
+          <Radio radioMessages={radioMessages} />
         )}
 
         {/* CRAFTING */}
@@ -640,7 +623,7 @@ const PipeOverlay = () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GameCanvas = () => {
-  const { buildings, setActiveModal, phase, stats } = useGameStore();
+  const { buildings, setActiveModal, phase, stats, waterBarrels, reservoirWater } = useGameStore();
   const { boiler, dynamo, greenhouse, distillery, collector } = buildings;
   const boilerActive = boiler.fuelTimer > 0;
 
@@ -719,11 +702,23 @@ const GameCanvas = () => {
           <BuildNode
             title="SBĚRAČ"
             built={collector.built}
-            effect={collector.built && !boilerActive ? '💧 čeká na kotel' : '💧 +VODA'}
+            effect={collector.built && !boilerActive ? '💧 čeká na kotel' : `💧 +VODA (Lvl ${collector.level || 0})`}
             effectMuted={collector.built && !boilerActive}
             icon={<Waves size={28} className={collector.built ? (boilerActive ? 'text-blue-400' : 'text-blue-700') : 'text-stone-500 group-hover:text-blue-400'} />}
             onClick={() => setActiveModal('build_collector')}
           />
+        </div>
+
+        {/* Sudy na vodu — nahoře uprostřed */}
+        <div className="absolute flex gap-1" style={{ top: '15%', left: '35%' }}>
+          {[...Array(waterBarrels)].map((_, i) => {
+            const fill = Math.min(100, Math.max(0, reservoirWater - i * 100));
+            return (
+              <div key={i} className="w-10 h-14 bg-stone-800 border-2 border-stone-700 rounded flex flex-col justify-end overflow-hidden cursor-pointer shadow-lg" onClick={() => setActiveModal('build_barrel')} title={`Sud ${i+1}: ${Math.round(fill)}/100 L`}>
+                <div className="w-full bg-blue-500/80 transition-all duration-1000" style={{ height: `${fill}%` }} />
+              </div>
+            );
+          })}
         </div>
 
         {/* Destilérka — vpravo nahoře (upgrade vody) */}
@@ -792,7 +787,8 @@ const WEATHER_INFO = {
 };
 
 const BottomBar = () => {
-  const { setActiveModal, phase, techPhase, weather } = useGameStore();
+  const { setActiveModal, phase, techPhase, weather, buildings } = useGameStore();
+  const { boiler } = buildings;
   const techLabel = TECH_PHASE_LABELS.find(t => t.phase === techPhase);
   const wInfo = WEATHER_INFO[weather] ?? WEATHER_INFO.clear;
   return (
@@ -887,7 +883,7 @@ const MiniBar = ({ value, color, label }) => {
 };
 
 const Modal = () => {
-  const { activeModal, setActiveModal, buildings, buildBuilding, resources, stats, hero, nadia, setTradeOffer, techPhase, pipes, repairPipe, replacePipe, upgradePipe, craftGaskets, cleanBoiler, addFuel, pumpWater, ventPressure, radioMessages, rain, reservoirWater } = useGameStore();
+  const { activeModal, setActiveModal, buildings, buildBuilding, resources, stats, hero, nadia, setTradeOffer, techPhase, pipes, repairPipe, replacePipe, upgradePipe, craftGaskets, cleanBoiler, addFuel, pumpWater, ventPressure, radioMessages, rain, reservoirWater, waterBarrels, buildBarrel, upgradeCollector, scavengeWoodOutside, phase, weather } = useGameStore();
   const [tradeInput, setTradeInput] = useState({ scrap: 0, wood: 0, coal: 0, parts: 0 });
   if (!activeModal) return null;
 
@@ -1027,35 +1023,89 @@ const Modal = () => {
 
     // Stavby
     const buildKey = activeModal.replace('build_', '');
+    
+    if (activeModal === 'build_barrel') {
+      const affordable = (resources.scrap ?? 0) >= 20 && (resources.wood ?? 0) >= 10;
+      return (
+        <div className="space-y-4">
+          <p className="text-stone-300 text-sm">Postavení dalšího sudu zvýší maximální kapacitu uskladněné vody o 100 litrů.</p>
+          <div className="bg-stone-950 rounded p-3 border border-stone-800">
+            <div className="text-[10px] text-stone-500 font-mono mb-2 tracking-wider">NÁKLADY NA STAVBU</div>
+            <div className="grid grid-cols-2 gap-1">
+              <div className={`text-sm flex justify-between ${(resources.scrap ?? 0) >= 20 ? 'text-stone-300' : 'text-red-400'}`}>
+                <span>Šrot:</span><span className="font-mono font-bold">20 <span className="text-stone-600">/ {resources.scrap ?? 0}</span></span>
+              </div>
+              <div className={`text-sm flex justify-between ${(resources.wood ?? 0) >= 10 ? 'text-stone-300' : 'text-red-400'}`}>
+                <span>Dřevo:</span><span className="font-mono font-bold">10 <span className="text-stone-600">/ {resources.wood ?? 0}</span></span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => { buildBarrel(); setActiveModal(null); }}
+            disabled={!affordable}
+            className="w-full py-2 bg-blue-800 border border-blue-600 text-blue-100 font-bold hover:bg-blue-700 rounded transition disabled:opacity-40 disabled:cursor-not-allowed font-mono"
+          >
+            {affordable ? 'Postavit sud (+100L)' : 'Nedostatek surovin'}
+          </button>
+        </div>
+      );
+    }
+
     const def = BUILDING_DEFS[buildKey];
     if (def) {
       const alreadyBuilt = buildings[buildKey]?.built;
       const affordable = Object.entries(def.costs).every(([item, amount]) => (resources[item] ?? 0) >= amount);
       const requiredPhase = BUILDING_PHASE[buildKey] ?? 1;
       const locked = techPhase < requiredPhase;
+      
+      const isCollector = buildKey === 'collector';
+      const collectorAffordable = (resources.scrap ?? 0) >= 20 && (resources.parts ?? 0) >= 5;
+
       return (
         <div className="space-y-4">
           <p className="text-stone-300 text-sm">{def.desc}</p>
-          <div className="bg-stone-950 rounded p-3 border border-stone-800">
-            <div className="text-[10px] text-stone-500 font-mono mb-2 tracking-wider">NÁKLADY NA STAVBU</div>
-            <div className="grid grid-cols-2 gap-1">
-              {Object.entries(def.costs).map(([item, amount]) => {
-                const have = resources[item] ?? 0;
-                const ok = have >= amount;
-                return (
-                  <div key={item} className={`text-sm flex justify-between ${ok ? 'text-stone-300' : 'text-red-400'}`}>
-                    <span>{RESOURCE_LABELS[item]}:</span>
-                    <span className="font-mono font-bold">{amount} <span className="text-stone-600">/ {have}</span></span>
-                  </div>
-                );
-              })}
+          {!alreadyBuilt && (
+            <div className="bg-stone-950 rounded p-3 border border-stone-800">
+              <div className="text-[10px] text-stone-500 font-mono mb-2 tracking-wider">NÁKLADY NA STAVBU</div>
+              <div className="grid grid-cols-2 gap-1">
+                {Object.entries(def.costs).map(([item, amount]) => {
+                  const have = resources[item] ?? 0;
+                  const ok = have >= amount;
+                  return (
+                    <div key={item} className={`text-sm flex justify-between ${ok ? 'text-stone-300' : 'text-red-400'}`}>
+                      <span>{RESOURCE_LABELS[item]}:</span>
+                      <span className="font-mono font-bold">{amount} <span className="text-stone-600">/ {have}</span></span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-          {alreadyBuilt
+          )}
+          {alreadyBuilt && isCollector && (
+            <div className="bg-stone-950 rounded p-3 border border-stone-800">
+              <div className="text-[10px] text-stone-500 font-mono mb-2 tracking-wider">UPGRADE SBĚRAČE (Lvl {buildings.collector.level + 1})</div>
+              <div className="grid grid-cols-2 gap-1">
+                <div className={`text-sm flex justify-between ${(resources.scrap ?? 0) >= 20 ? 'text-stone-300' : 'text-red-400'}`}>
+                  <span>Šrot:</span><span className="font-mono font-bold">20 <span className="text-stone-600">/ {resources.scrap ?? 0}</span></span>
+                </div>
+                <div className={`text-sm flex justify-between ${(resources.parts ?? 0) >= 5 ? 'text-stone-300' : 'text-red-400'}`}>
+                  <span>Součástky:</span><span className="font-mono font-bold">5 <span className="text-stone-600">/ {resources.parts ?? 0}</span></span>
+                </div>
+              </div>
+              <button
+                onClick={() => { upgradeCollector(); setActiveModal(null); }}
+                disabled={!collectorAffordable}
+                className="w-full mt-3 py-2 bg-blue-800 border border-blue-600 text-blue-100 font-bold hover:bg-blue-700 rounded transition disabled:opacity-40 disabled:cursor-not-allowed font-mono"
+              >
+                {collectorAffordable ? 'Vylepšit sběrač' : 'Nedostatek surovin'}
+              </button>
+            </div>
+          )}
+          {alreadyBuilt && !isCollector
             ? <div className="text-green-400 font-mono text-sm">✓ Již postaveno a aktivní.</div>
             : locked
             ? <div className="text-stone-500 font-mono text-sm text-center py-2">🔒 Odemkne se ve fázi {requiredPhase} (den {TECH_PHASE_LABELS.find(t => t.phase === requiredPhase)?.fromDay})</div>
-            : (
+            : !alreadyBuilt && (
               <button
                 onClick={() => { buildBuilding(buildKey); setActiveModal(null); }}
                 disabled={!affordable}
@@ -1070,7 +1120,31 @@ const Modal = () => {
     }
 
     if (activeModal === 'map') {
-      return <p className="text-stone-400 text-sm">Výprava vychází každou noc automaticky a přináší suroviny. Rozšíření (volba lokace, rizika) přijde v další fázi.</p>;
+      const canGoOut = hero.energy >= 20;
+      return (
+        <div className="space-y-4">
+          <p className="text-stone-300 text-sm">Můžeš vyrazit ven do blízkého okolí a zkusit nasekat nějaké dřevo ze zbytků stromů. Výprava trvá 3 hodiny.</p>
+          <div className="bg-stone-950 rounded p-3 border border-stone-800 text-sm">
+            <div className="text-stone-400 mb-2">Rizika a dopady:</div>
+            <ul className="list-disc pl-5 text-stone-500 mb-3">
+              <li><span className="text-yellow-500">Stojí 35 Energie</span> (Máš: {Math.round(hero.energy)})</li>
+              <li>Přineseš náhodné množství dřeva a štěpek</li>
+              <li>Ztratíš 3 hodiny (90 ticků) času</li>
+              {phase === 'night' && (weather === 'frost' || weather === 'storm') && (
+                <li className="text-red-400">Varování: Mrazivá bouře/mráz sníží Tvé zdraví a teplo!</li>
+              )}
+            </ul>
+            <button
+              onClick={() => { scavengeWoodOutside(); setActiveModal(null); }}
+              disabled={!canGoOut}
+              className="w-full py-2 bg-amber-800 border border-amber-600 text-amber-100 font-bold hover:bg-amber-700 rounded transition disabled:opacity-40 disabled:cursor-not-allowed font-mono"
+            >
+              {canGoOut ? 'Vyrazit ven (-3h)' : 'Jsi příliš unavený (min. 20 energie)'}
+            </button>
+          </div>
+          <p className="text-stone-500 text-xs mt-4">Poznámka: Nadia (pokud je s tebou) vychází automaticky každou noc a přináší hlavní loot k ránu.</p>
+        </div>
+      );
     }
 
     // ── Postavy ───────────────────────────────────────────────────────────────
