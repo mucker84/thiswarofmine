@@ -6,9 +6,9 @@ import {
   PauseCircle, PlayCircle, AlertTriangle, Package, Waves,
   FastForward, SkipForward, Building2, TrendingUp, ArrowLeftRight
 } from 'lucide-react';
-import { useGameStore } from './store/gameStore';
+import { useGameStore, BUILDING_PHASE, TECH_PHASE_LABELS } from './store/gameStore';
 import { useGameLoop } from './hooks/useGameLoop';
-import { BUILDING_PHASE, TECH_PHASE_LABELS } from './store/gameStore';
+import { PIPE_COORDS, PIPE_SLOTS, MATERIALS, NODE_MIN_PRESSURE, NODE_LABELS, REPAIR_COST, REPLACE_COST } from './data/pipeSystem';
 
 function formatTime(minutes) {
   const h = Math.floor(minutes / 60) % 24;
@@ -452,6 +452,100 @@ const Pipe = ({ active, style, className }) => (
 
 // ─── GAME CANVAS ─────────────────────────────────────────────────────────────
 
+// ─── PIPE OVERLAY ────────────────────────────────────────────────────────────
+
+const PipeOverlay = () => {
+  const { pipes, buildings, setActiveModal } = useGameStore();
+
+  return (
+    <svg
+      viewBox="0 0 160 90"
+      className="absolute inset-0 w-full h-full"
+      style={{ zIndex: 6 }}
+    >
+      <defs>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="0.5" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+
+      {Object.entries(PIPE_COORDS).map(([pipeId, pos]) => {
+        const destBuilding = pipeId.replace('boiler_', '');
+        if (!buildings[destBuilding]?.built) return null;
+
+        const pipe = pipes[pipeId];
+        if (!pipe) return null;
+
+        const mat     = MATERIALS[pipe.material];
+        const burst   = pipe.integrity <= 0;
+        const color   = burst
+          ? '#1f2937'
+          : pipe.isLeaking
+          ? '#dc2626'
+          : (pipe.pressure > 0 ? mat.activeColor : mat.color);
+
+        const sw      = mat.strokeWidth;
+        const active  = pipe.pressure > 0 && !burst;
+        const midX    = (pos.x1 + pos.x2) / 2;
+        const midY    = (pos.y1 + pos.y2) / 2;
+
+        return (
+          <g
+            key={pipeId}
+            style={{ cursor: 'pointer' }}
+            onClick={() => setActiveModal(`pipe_${pipeId}`)}
+          >
+            {/* Hit area */}
+            <line x1={pos.x1} y1={pos.y1} x2={pos.x2} y2={pos.y2}
+              stroke="transparent" strokeWidth={4} />
+
+            {/* Pipe body */}
+            <line x1={pos.x1} y1={pos.y1} x2={pos.x2} y2={pos.y2}
+              stroke={color}
+              strokeWidth={sw}
+              strokeOpacity={burst ? 0.25 : 1}
+              strokeDasharray={burst ? '2 2' : 'none'}
+              filter={active ? 'url(#glow)' : 'none'}
+            />
+
+            {/* Flow animation */}
+            {active && !pipe.isLeaking && (
+              <line x1={pos.x1} y1={pos.y1} x2={pos.x2} y2={pos.y2}
+                stroke={color} strokeWidth={sw * 0.6} strokeOpacity={0.6}
+                strokeDasharray="3 7"
+              >
+                <animate attributeName="stroke-dashoffset" from="0" to="-10"
+                  dur={pipe.material === 'steel' ? '0.6s' : pipe.material === 'copper' ? '0.9s' : '1.3s'}
+                  repeatCount="indefinite" />
+              </line>
+            )}
+
+            {/* Leak pulse */}
+            {pipe.isLeaking && !burst && (
+              <circle cx={midX} cy={midY} r="1.8" fill="#dc2626">
+                <animate attributeName="opacity" values="0.3;1;0.3" dur="0.7s" repeatCount="indefinite" />
+                <animate attributeName="r" values="1.2;2.2;1.2" dur="0.7s" repeatCount="indefinite" />
+              </circle>
+            )}
+
+            {/* Integrity label on hover (always visible when low) */}
+            {pipe.integrity < 40 && !burst && (
+              <text x={midX} y={midY - 2.5} textAnchor="middle"
+                fontSize="3.5" fill={pipe.isLeaking ? '#dc2626' : '#f97316'}
+                fontFamily="monospace">
+                {Math.round(pipe.integrity)}%
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const GameCanvas = () => {
   const { buildings, setActiveModal, phase, stats } = useGameStore();
   const { boiler, dynamo, greenhouse, distillery, collector } = buildings;
@@ -484,35 +578,11 @@ const GameCanvas = () => {
       )}
 
       <div className="relative w-full max-w-4xl" style={{ aspectRatio: '16/9' }}>
+        <PipeOverlay />
         {/* Nápisy místností */}
         <div className="absolute top-8 left-10 text-stone-700 font-mono text-lg tracking-widest font-bold">SKLADIŠTĚ</div>
         <div className="absolute top-8 right-10 text-stone-700 font-mono text-lg tracking-widest font-bold">OBYTNÁ ČÁST</div>
         <div className="absolute bottom-8 right-10 text-stone-700 font-mono text-sm tracking-widest font-bold">DÍLNA</div>
-
-        {/* Trubka Dynamo → Kotel */}
-        <div
-          className={`absolute border-t-4 border-l-4 rounded-tl-2xl transition-colors duration-1000 ${boilerActive && dynamo.built ? 'border-amber-800' : 'border-stone-700'}`}
-          style={{ bottom: '22%', left: '16%', width: '26%', height: '28%', opacity: 0.6 }}
-        />
-        {/* Trubka Pěstírna → Kotel */}
-        <div
-          className={`absolute border-t-4 border-r-4 rounded-tr-2xl transition-colors duration-1000 ${boilerActive && greenhouse.built ? 'border-amber-800' : 'border-stone-700'}`}
-          style={{ bottom: '22%', right: '16%', width: '26%', height: '28%', opacity: 0.6 }}
-        />
-
-        {/* Tok v trubkách (animovaný pruh) */}
-        {boilerActive && dynamo.built && (
-          <div
-            className="absolute bg-gradient-to-r from-transparent via-amber-600/30 to-transparent animate-pulse"
-            style={{ bottom: '22%', left: '16%', width: '26%', height: '3px' }}
-          />
-        )}
-        {boilerActive && greenhouse.built && (
-          <div
-            className="absolute bg-gradient-to-l from-transparent via-amber-600/30 to-transparent animate-pulse"
-            style={{ bottom: '22%', right: '16%', width: '26%', height: '3px' }}
-          />
-        )}
 
         {/* Kotel — střed */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -699,7 +769,7 @@ const MiniBar = ({ value, color, label }) => {
 };
 
 const Modal = () => {
-  const { activeModal, setActiveModal, buildings, stokeCoal, stokeWood, buildBuilding, resources, stats, hero, nadia, setTradeOffer, techPhase } = useGameStore();
+  const { activeModal, setActiveModal, buildings, stokeCoal, stokeWood, buildBuilding, resources, stats, hero, nadia, setTradeOffer, techPhase, pipes, repairPipe, replacePipe, upgradePipe } = useGameStore();
   const [tradeInput, setTradeInput] = useState({ scrap: 0, wood: 0, coal: 0, parts: 0 });
   if (!activeModal) return null;
 
@@ -962,6 +1032,136 @@ const Modal = () => {
       );
     }
 
+    // ── Pipe modal ────────────────────────────────────────────────────────────
+    if (activeModal?.startsWith('pipe_')) {
+      const pipeId = activeModal.replace('pipe_', '');
+      const pipe   = pipes[pipeId];
+      if (!pipe) return <p className="text-stone-500 text-sm">Trubka nenalezena.</p>;
+
+      const mat      = MATERIALS[pipe.material];
+      const slot     = PIPE_SLOTS[pipeId];
+      const destNode = pipeId.replace('boiler_', '');
+
+      const integrityPct   = Math.round(pipe.integrity);
+      const integrityColor = integrityPct > 60 ? 'bg-green-600' : integrityPct > 30 ? 'bg-amber-600' : 'bg-red-600';
+      const pressureLoss   = mat.resistance * slot.segments;
+
+      const canRepair  = resources.scrap >= REPAIR_COST.scrap && resources.wood >= REPAIR_COST.wood;
+      const canReplace = resources.scrap >= REPLACE_COST.scrap && resources.parts >= REPLACE_COST.parts;
+
+      const upgradeOptions = [];
+      if (pipe.material === 'wood') {
+        upgradeOptions.push({ to: 'copper', label: 'Měděné',  cost: MATERIALS.copper.buildCost, minPhase: 2 });
+        upgradeOptions.push({ to: 'steel',  label: 'Ocelové', cost: MATERIALS.steel.buildCost,  minPhase: 3 });
+      } else if (pipe.material === 'copper') {
+        upgradeOptions.push({ to: 'steel',  label: 'Ocelové', cost: MATERIALS.steel.buildCost,  minPhase: 3 });
+      }
+
+      return (
+        <div className="space-y-4">
+          {/* Status grid */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-stone-950 rounded p-2 border border-stone-800 text-center">
+              <div className="text-[9px] text-stone-500 font-mono">MATERIÁL</div>
+              <div className="text-sm font-bold font-mono mt-0.5" style={{ color: mat.activeColor }}>{mat.label}</div>
+            </div>
+            <div className="bg-stone-950 rounded p-2 border border-stone-800 text-center">
+              <div className="text-[9px] text-stone-500 font-mono">TLAK</div>
+              <div className={`text-sm font-bold font-mono mt-0.5 ${(pipe.pressure ?? 0) > mat.maxPressure ? 'text-red-400' : 'text-amber-400'}`}>
+                {Math.round(pipe.pressure ?? 0)}
+                <span className="text-stone-600 text-[9px]"> / {mat.maxPressure}</span>
+              </div>
+            </div>
+            <div className="bg-stone-950 rounded p-2 border border-stone-800 text-center">
+              <div className="text-[9px] text-stone-500 font-mono">ZTRÁTA</div>
+              <div className="text-sm font-bold font-mono mt-0.5 text-stone-400">
+                -{pressureLoss}
+                <span className="text-stone-600 text-[9px]"> bar</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Integrity */}
+          <div className="bg-stone-950 rounded p-3 border border-stone-800">
+            <div className="flex justify-between items-center mb-1.5">
+              <div className="text-[10px] text-stone-500 font-mono tracking-wider">INTEGRITA</div>
+              <div className={`text-xs font-bold font-mono ${integrityPct > 60 ? 'text-green-400' : integrityPct > 30 ? 'text-amber-400' : 'text-red-400 animate-pulse'}`}>
+                {integrityPct}%
+                <span className="text-stone-600 font-normal"> (max {Math.round(pipe.maxIntegrityCap)}%)</span>
+              </div>
+            </div>
+            <div className="w-full h-3 bg-stone-900 rounded overflow-hidden border border-stone-800">
+              <div className={`h-full transition-all ${integrityColor}`} style={{ width: `${integrityPct}%` }} />
+            </div>
+            {pipe.maxIntegrityCap < 100 && (
+              <div className="text-[9px] text-stone-600 mt-1">Kapacita snížena záplatami ({Math.round(pipe.maxIntegrityCap)}%)</div>
+            )}
+          </div>
+
+          {/* Leak warning */}
+          {pipe.isLeaking && (
+            <div className="flex items-center gap-2 text-xs text-red-400 bg-red-950/30 border border-red-800/40 rounded p-2">
+              <AlertTriangle size={14} />
+              Trubka teče! Tlak uniká, výkon uzlu snížen.
+            </div>
+          )}
+
+          {/* Repair / Replace */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => { repairPipe(pipeId); setActiveModal(null); }}
+              disabled={!canRepair || integrityPct >= pipe.maxIntegrityCap}
+              className="py-2 px-2 bg-stone-800 border border-stone-600 text-stone-200 text-xs font-mono rounded hover:bg-stone-700 transition disabled:opacity-40 disabled:cursor-not-allowed leading-snug"
+            >
+              🔧 Záplata
+              <div className="text-stone-500 text-[9px] mt-0.5">{REPAIR_COST.scrap}× šrot + {REPAIR_COST.wood}× dřevo</div>
+            </button>
+            <button
+              onClick={() => { replacePipe(pipeId); setActiveModal(null); }}
+              disabled={!canReplace}
+              className="py-2 px-2 bg-stone-800 border border-stone-600 text-stone-200 text-xs font-mono rounded hover:bg-stone-700 transition disabled:opacity-40 disabled:cursor-not-allowed leading-snug"
+            >
+              🔄 Výměna
+              <div className="text-stone-500 text-[9px] mt-0.5">{REPLACE_COST.scrap}× šrot + {REPLACE_COST.parts}× sou.</div>
+            </button>
+          </div>
+
+          {/* Upgrade */}
+          {upgradeOptions.length > 0 && (
+            <div>
+              <div className="text-[10px] text-stone-600 uppercase tracking-wider mb-2">Upgrade materiálu</div>
+              <div className="space-y-2">
+                {upgradeOptions.map(opt => {
+                  const locked     = techPhase < opt.minPhase;
+                  const canAfford  = Object.entries(opt.cost).every(([k, v]) => (resources[k] ?? 0) >= v);
+                  const costStr    = Object.entries(opt.cost).map(([k, v]) => `${v}× ${RESOURCE_LABELS[k]}`).join(', ');
+                  return (
+                    <button
+                      key={opt.to}
+                      onClick={() => { upgradePipe(pipeId, opt.to); setActiveModal(null); }}
+                      disabled={locked || !canAfford}
+                      className="w-full py-2 px-3 bg-amber-900/20 border border-amber-800/40 text-amber-300 text-xs font-mono rounded hover:bg-amber-900/40 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span>→ {opt.label}</span>
+                        {locked
+                          ? <span className="text-stone-600">🔒 fáze {opt.minPhase}</span>
+                          : <span className="text-stone-500">{costStr}</span>
+                        }
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {pipe.material === 'steel' && (
+            <div className="text-[10px] text-stone-600 text-center">Ocelové potrubí — maximální upgrade.</div>
+          )}
+        </div>
+      );
+    }
+
     if (activeModal === 'buildings_overview') {
       const allBuildings = [
         { key: 'collector',  icon: '💧', label: 'Sběrač kondenzátu', effect: '+voda (závisí na kotli)', phase: 1 },
@@ -1019,6 +1219,12 @@ const Modal = () => {
     characters:          '👥 POSTAVY',
     nadia_trade:         '🤝 OBCHOD S NADIÍ',
     tech_tree:           '📈 TECHNOLOGICKÝ STROM',
+    ...Object.fromEntries(
+      Object.keys(PIPE_SLOTS).map(id => [
+        `pipe_${id}`,
+        `🪛 TRUBKA › ${NODE_LABELS[id.replace('boiler_', '')] ?? id}`,
+      ])
+    ),
   };
 
   return (

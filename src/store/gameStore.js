@@ -1,51 +1,42 @@
 import { create } from 'zustand';
+import {
+  PIPE_SLOTS, MATERIALS, NODE_MIN_PRESSURE,
+  REPAIR_COST, REPLACE_COST,
+} from '../data/pipeSystem';
 
-const DAY_TICKS = 480;
+const DAY_TICKS   = 480;
 const NIGHT_TICKS = 240;
 const TOTAL_CYCLE = DAY_TICKS + NIGHT_TICKS;
 
 const NIGHT_LOOT = { scrap: 35, wood: 18, coal: 7, parts: 3 };
 
-// Tech fáze: den → fáze
-const TECH_PHASES = [
+export const TECH_PHASE_LABELS = [
   { phase: 1, label: 'Teplo',    fromDay: 1  },
   { phase: 2, label: 'Stabilit', fromDay: 4  },
   { phase: 3, label: 'Výživa',   fromDay: 8  },
   { phase: 4, label: 'Výpočet',  fromDay: 15 },
 ];
 
-// Která budova vyžaduje jakou fázi
 export const BUILDING_PHASE = {
-  boiler:     1,
-  collector:  1,
-  dynamo:     2,
-  distillery: 2,
+  boiler: 1, collector: 1,
+  dynamo: 2, distillery: 2,
   greenhouse: 3,
-  workshop:   4,
+  workshop: 4,
 };
 
-export const TECH_PHASE_LABELS = TECH_PHASES;
-
-// Nadin obchod: co nabídneš → co dostaneš
-// Vrací: { resource, qty } nebo null
 function processTrade(offer, trust) {
-  const mult = 0.5 + trust / 100; // trust 60 → 1.1, trust 100 → 1.5
+  const mult = 0.5 + trust / 100;
   const result = {};
-
-  if (offer.scrap > 0) {
-    result.coal = Math.max(1, Math.floor((offer.scrap / 5) * mult));
-  }
-  if (offer.wood > 0) {
-    result.scrap = Math.floor(offer.wood * 1.5 * mult);
-  }
-  if (offer.parts > 0) {
-    result.scrap = (result.scrap ?? 0) + Math.floor(offer.parts * 7 * mult);
-  }
-  if (offer.coal > 0) {
-    result.wood = Math.floor(offer.coal * 2);
-  }
-
+  if (offer.scrap > 0) result.coal  = Math.max(1, Math.floor((offer.scrap / 5) * mult));
+  if (offer.wood  > 0) result.scrap = Math.floor(offer.wood * 1.5 * mult);
+  if (offer.parts > 0) result.scrap = (result.scrap ?? 0) + Math.floor(offer.parts * 7 * mult);
+  if (offer.coal  > 0) result.wood  = Math.floor(offer.coal * 2);
   return result;
+}
+
+// Vytvoří novou dřevěnou trubku
+function newWoodPipe() {
+  return { material: 'wood', integrity: 100, maxIntegrityCap: 100, isLeaking: false, pressure: 0 };
 }
 
 export const useGameStore = create((set, get) => ({
@@ -57,40 +48,21 @@ export const useGameStore = create((set, get) => ({
   nightLootGiven: false,
   techPhase: 1,
 
-  // --- PAVEL (hlavní hrdina) ---
-  hero: {
-    name: 'Pavel',
-    morale: 70,  // 0–100
-    energy: 90,  // 0–100, klesá přes den, obnovuje se v noci
-  },
+  // --- PAVEL ---
+  hero: { name: 'Pavel', morale: 70, energy: 90 },
 
   // --- NADIA ---
   nadia: {
-    met: false,
-    trust: 60,            // 0–100
-    status: 'unknown',   // 'unknown' | 'home' | 'out'
-    capacity: 40,         // max jednotek co unese (kulhá)
+    met: false, trust: 60, status: 'unknown', capacity: 40,
     tradeOffer: { scrap: 0, wood: 0, coal: 0, parts: 0 },
-    pendingReturn: null,  // co přinese zpět
-    notification: false,
+    pendingReturn: null, notification: false,
   },
 
-  // --- STAVY (0–100 float) — reprezentují Pavla + přístřešek ---
-  stats: {
-    health: 82,
-    food: 70,
-    heat: 60,
-    water: 65,
-    power: 40,
-  },
+  // --- STAVY ---
+  stats: { health: 82, food: 70, heat: 60, water: 65, power: 40 },
 
   // --- SUROVINY ---
-  resources: {
-    scrap: 312,
-    wood: 145,
-    coal: 24,
-    parts: 12,
-  },
+  resources: { scrap: 312, wood: 145, coal: 24, parts: 12 },
 
   // --- BUDOVY ---
   buildings: {
@@ -101,6 +73,9 @@ export const useGameStore = create((set, get) => ({
     greenhouse: { built: false, level: 0 },
     workshop:   { built: false, level: 0 },
   },
+
+  // --- TRUBKY (null = nepostavena, object = existuje) ---
+  pipes: {},
 
   // --- LOG & INVENTÁŘ ---
   messages: [],
@@ -121,55 +96,13 @@ export const useGameStore = create((set, get) => ({
 
   // ─── AKCE ──────────────────────────────────────────────────────────────────
 
-  setActiveModal: (modal) => set({ activeModal: modal }),
-  setActiveLeftTab: (tab)  => set({ activeLeftTab: tab }),
-  togglePause: () => set(s => ({ paused: !s.paused })),
-  toggleFF:    () => set(s => ({ speed: s.speed === 1 ? 5 : 1 })),
-
-  setTradeOffer: (offer) => set(s => ({
-    nadia: { ...s.nadia, tradeOffer: { ...s.nadia.tradeOffer, ...offer } },
-  })),
-
-  clearNadiaNotification: () => set(s => ({
-    nadia: { ...s.nadia, notification: false },
-  })),
-
-  skipPhase: () => set(s => {
-    const cyclePos = s.tick % TOTAL_CYCLE;
-    const inDay = cyclePos < DAY_TICKS;
-    const remaining = inDay ? DAY_TICKS - cyclePos : TOTAL_CYCLE - cyclePos;
-
-    const stats = { ...s.stats };
-    const { boiler, greenhouse } = s.buildings;
-    const boilerActive = boiler.fuel > 0;
-    stats.food  = Math.max(0, stats.food  - (greenhouse.built ? 0.015 : 0.03) * remaining);
-    stats.water = Math.max(0, stats.water - 0.025 * remaining);
-    stats.heat  = Math.min(100, Math.max(0, stats.heat + (boilerActive ? 0.04 : -0.08) * remaining));
-
-    const hero = { ...s.hero };
-    if (inDay) {
-      hero.energy = Math.max(0, hero.energy - 0.015 * remaining);
-    } else {
-      hero.energy = Math.min(100, hero.energy + 0.04 * remaining);
-    }
-
-    const newTick = s.tick + remaining;
-    const newCyclePos = newTick % TOTAL_CYCLE;
-    const newPhase = newCyclePos < DAY_TICKS ? 'day' : 'night';
-    const dayNumber = s.dayNumber + (inDay ? 0 : 1);
-
-    let timeOfDay;
-    if (newPhase === 'day') {
-      timeOfDay = 360 + Math.floor((newCyclePos / DAY_TICKS) * 960);
-    } else {
-      timeOfDay = (1320 + Math.floor(((newCyclePos - DAY_TICKS) / NIGHT_TICKS) * 480)) % 1440;
-    }
-
-    const label = inDay ? 'Den přeskočen — nastává noc.' : 'Noc přeskočena — nový den.';
-    const messages = [{ id: Date.now(), text: label, type: 'info' }, ...s.messages].slice(0, 10);
-
-    return { tick: newTick, phase: newPhase, timeOfDay, dayNumber, stats, hero, messages, nightLootGiven: false };
-  }),
+  setActiveModal:  (m) => set({ activeModal: m }),
+  setActiveLeftTab:(t) => set({ activeLeftTab: t }),
+  togglePause:     ()  => set(s => ({ paused: !s.paused })),
+  toggleFF:        ()  => set(s => ({ speed: s.speed === 1 ? 5 : 1 })),
+  setTradeOffer:   (o) => set(s => ({ nadia: { ...s.nadia, tradeOffer: { ...s.nadia.tradeOffer, ...o } } })),
+  clearNadiaNotification: () => set(s => ({ nadia: { ...s.nadia, notification: false } })),
+  toggleTask: (id) => set(s => ({ tasks: s.tasks.map(t => t.id === id ? { ...t, done: !t.done } : t) })),
 
   stokeCoal: () => set(s => {
     if (s.resources.coal < 1) return s;
@@ -197,20 +130,115 @@ export const useGameStore = create((set, get) => ({
     };
     const cost = costs[name];
     if (!cost) return s;
-
-    // Zkontroluj tech fázi
-    const requiredPhase = BUILDING_PHASE[name] ?? 1;
-    if (s.techPhase < requiredPhase) return s;
+    if (s.techPhase < (BUILDING_PHASE[name] ?? 1)) return s;
 
     const res = { ...s.resources };
     for (const [item, amount] of Object.entries(cost)) {
       if ((res[item] ?? 0) < amount) return s;
       res[item] -= amount;
     }
+
+    // Auto-vytvoř dřevěnou trubku k novému uzlu
+    const pipeId = `boiler_${name}`;
+    const newPipes = { ...s.pipes };
+    if (PIPE_SLOTS[pipeId] && !newPipes[pipeId]) {
+      newPipes[pipeId] = newWoodPipe();
+    }
+
     return {
       resources: res,
       buildings: { ...s.buildings, [name]: { built: true, level: 1 } },
+      pipes: newPipes,
     };
+  }),
+
+  // Záplata: levná, sníží maxIntegrityCap o 5 %
+  repairPipe: (pipeId) => set(s => {
+    const pipe = s.pipes[pipeId];
+    if (!pipe) return s;
+    const res = { ...s.resources };
+    for (const [item, amount] of Object.entries(REPAIR_COST)) {
+      if ((res[item] ?? 0) < amount) return s;
+      res[item] -= amount;
+    }
+    const newCap = Math.max(50, pipe.maxIntegrityCap - 5);
+    return {
+      resources: res,
+      pipes: {
+        ...s.pipes,
+        [pipeId]: { ...pipe, integrity: Math.min(newCap, pipe.integrity + 45), maxIntegrityCap: newCap, isLeaking: false },
+      },
+    };
+  }),
+
+  // Plná výměna: drahší, plný reset integrity
+  replacePipe: (pipeId) => set(s => {
+    const pipe = s.pipes[pipeId];
+    if (!pipe) return s;
+    const res = { ...s.resources };
+    for (const [item, amount] of Object.entries(REPLACE_COST)) {
+      if ((res[item] ?? 0) < amount) return s;
+      res[item] -= amount;
+    }
+    return {
+      resources: res,
+      pipes: { ...s.pipes, [pipeId]: { ...pipe, integrity: 100, maxIntegrityCap: 100, isLeaking: false } },
+    };
+  }),
+
+  // Upgrade materiálu trubky
+  upgradePipe: (pipeId, newMaterial) => set(s => {
+    const pipe = s.pipes[pipeId];
+    if (!pipe || pipe.material === newMaterial) return s;
+    const mat = MATERIALS[newMaterial];
+    const res = { ...s.resources };
+    for (const [item, amount] of Object.entries(mat.buildCost)) {
+      if ((res[item] ?? 0) < amount) return s;
+      res[item] -= amount;
+    }
+    return {
+      resources: res,
+      pipes: {
+        ...s.pipes,
+        [pipeId]: { material: newMaterial, integrity: 100, maxIntegrityCap: 100, isLeaking: false, pressure: pipe.pressure },
+      },
+    };
+  }),
+
+  skipPhase: () => set(s => {
+    const cyclePos = s.tick % TOTAL_CYCLE;
+    const inDay    = cyclePos < DAY_TICKS;
+    const remaining = inDay ? DAY_TICKS - cyclePos : TOTAL_CYCLE - cyclePos;
+
+    const stats = { ...s.stats };
+    const { boiler, greenhouse } = s.buildings;
+    const boilerActive = boiler.fuel > 0;
+    stats.food  = Math.max(0, stats.food  - (greenhouse.built ? 0.015 : 0.03) * remaining);
+    stats.water = Math.max(0, stats.water - 0.025 * remaining);
+    stats.heat  = Math.min(100, Math.max(0, stats.heat + (boilerActive ? 0.04 : -0.08) * remaining));
+
+    const hero = { ...s.hero };
+    hero.energy = inDay
+      ? Math.max(0,   hero.energy - 0.015 * remaining)
+      : Math.min(100, hero.energy + 0.04  * remaining);
+
+    const newTick     = s.tick + remaining;
+    const newCyclePos = newTick % TOTAL_CYCLE;
+    const newPhase    = newCyclePos < DAY_TICKS ? 'day' : 'night';
+    const dayNumber   = s.dayNumber + (inDay ? 0 : 1);
+    let timeOfDay;
+    if (newPhase === 'day') {
+      timeOfDay = 360 + Math.floor((newCyclePos / DAY_TICKS) * 960);
+    } else {
+      timeOfDay = (1320 + Math.floor(((newCyclePos - DAY_TICKS) / NIGHT_TICKS) * 480)) % 1440;
+    }
+
+    const messages = [
+      { id: Date.now(), text: inDay ? 'Den přeskočen — nastává noc.' : 'Noc přeskočena — nový den.', type: 'info' },
+      ...s.messages,
+    ].slice(0, 12);
+
+    return { tick: newTick, phase: newPhase, timeOfDay, dayNumber, stats, hero, messages, nightLootGiven: false };
   }),
 
   // ─── HERNÍ TICK ────────────────────────────────────────────────────────────
@@ -218,11 +246,11 @@ export const useGameStore = create((set, get) => ({
   gameTick: () => set(s => {
     if (s.paused) return s;
 
-    const tick = s.tick + 1;
-    const cyclePos = tick % TOTAL_CYCLE;
+    const tick        = s.tick + 1;
+    const cyclePos    = tick % TOTAL_CYCLE;
     const prevCyclePos = (tick - 1) % TOTAL_CYCLE;
-    const phase = cyclePos < DAY_TICKS ? 'day' : 'night';
-    const prevPhase = prevCyclePos < DAY_TICKS ? 'day' : 'night';
+    const phase       = cyclePos    < DAY_TICKS ? 'day' : 'night';
+    const prevPhase   = prevCyclePos < DAY_TICKS ? 'day' : 'night';
     const phaseJustChanged = phase !== prevPhase;
 
     let timeOfDay;
@@ -236,58 +264,82 @@ export const useGameStore = create((set, get) => ({
 
     // Tech fáze
     let techPhase = s.techPhase;
-    for (const tp of TECH_PHASES) {
+    for (const tp of TECH_PHASE_LABELS) {
       if (dayNumber >= tp.fromDay && techPhase < tp.phase) techPhase = tp.phase;
-    }
-    if (techPhase > s.techPhase) {
-      // Fáze se zvýšila — přidáme zprávu dole
     }
 
     // Kotel
     const boiler = { ...s.buildings.boiler };
     if (tick % 30 === 0 && boiler.fuel > 0) boiler.fuel = Math.max(0, boiler.fuel - 1);
-    const boilerActive = boiler.fuel > 0;
+    const boilerActive    = boiler.fuel > 0;
+    const boilerPressure  = boilerActive ? boiler.fuel : 0; // 0–100 bar
 
-    const { dynamo, collector, distillery, greenhouse } = s.buildings;
-    let resources = { ...s.resources };
-    let nadia = { ...s.nadia };
-    let hero = { ...s.hero };
+    let resources      = { ...s.resources };
+    let nadia          = { ...s.nadia };
+    let hero           = { ...s.hero };
     let nightLootGiven = s.nightLootGiven;
-    const messages = [...s.messages];
-    let inventory = [...s.inventory];
+    const messages     = [...s.messages];
+    let inventory      = [...s.inventory];
+    const { dynamo, collector, distillery, greenhouse } = s.buildings;
 
-    // ── Nadia logika ──────────────────────────────────────────────────────────
+    // ── Trubky: tlak + degradace ──────────────────────────────────────────────
+    const newPipes = { ...s.pipes };
+    const pipeEfficiency = {}; // efektivita 0–1 pro každý uzel
 
-    // Den 3: Nadia se poprvé objeví
+    for (const [pipeId, pipe] of Object.entries(newPipes)) {
+      if (!pipe) continue;
+      const slot = PIPE_SLOTS[pipeId];
+      const mat  = MATERIALS[pipe.material];
+      if (!slot || !mat) continue;
+
+      // Tlak na konci trubky
+      let pressureLoss = slot.segments * mat.resistance;
+      if (pipe.isLeaking) pressureLoss *= 1.8; // leak zdvojí ztráty
+      const destPressure = Math.max(0, boilerPressure - pressureLoss);
+      const minPress = NODE_MIN_PRESSURE[slot.to] ?? 1;
+      pipeEfficiency[slot.to] = pipe.integrity > 0 ? Math.min(1.0, destPressure / minPress) : 0;
+
+      // Degradace integrity (jen při provozu)
+      let updatedPipe = { ...pipe, pressure: destPressure };
+      if (boilerActive) {
+        let dmg = mat.degradation;
+        if (boilerPressure > mat.maxPressure) dmg *= 3; // přetlak — rychlé ničení
+
+        const newIntegrity = Math.max(0, pipe.integrity - dmg);
+        const wasLeaking   = pipe.isLeaking;
+        const nowLeaking   = newIntegrity < 30;
+
+        if (nowLeaking && !wasLeaking) {
+          messages.unshift({ id: Date.now() + 50, text: `Trubka ke ${slot.to} začala netěsit! (integrita ${Math.round(newIntegrity)} %)`, type: 'warning' });
+        }
+        if (newIntegrity === 0 && pipe.integrity > 0) {
+          messages.unshift({ id: Date.now() + 51, text: `Trubka ke ${slot.to} PRASKLA! Okamžitě opravte.`, type: 'warning' });
+        }
+        updatedPipe = { ...updatedPipe, integrity: newIntegrity, isLeaking: nowLeaking };
+      }
+      newPipes[pipeId] = updatedPipe;
+    }
+
+    // ── Nadia ─────────────────────────────────────────────────────────────────
     if (dayNumber >= 3 && !nadia.met && phase === 'day') {
       nadia = { ...nadia, met: true, status: 'home' };
       messages.unshift({ id: Date.now() + 10, text: 'Nadia zaklepala na dveře. Kulhá, ale nabídla pomoc s obstaráváním.', type: 'info' });
     }
 
-    // Přechod den→noc: Nadia odchází
     if (phaseJustChanged && phase === 'night' && nadia.met && nadia.status === 'home') {
-      // Zpracuj trade nabídku
-      const offer = nadia.tradeOffer;
+      const offer      = nadia.tradeOffer;
       const totalOffered = Object.values(offer).reduce((a, b) => a + b, 0);
-
       let pendingReturn = null;
       if (totalOffered > 0 && totalOffered <= nadia.capacity) {
-        // Odečti nabídnuté suroviny
-        for (const [k, v] of Object.entries(offer)) {
-          resources[k] = Math.max(0, (resources[k] ?? 0) - v);
-        }
+        for (const [k, v] of Object.entries(offer)) resources[k] = Math.max(0, (resources[k] ?? 0) - v);
         pendingReturn = processTrade(offer, nadia.trust);
-        messages.unshift({ id: Date.now() + 11, text: `Nadia odešla — vezme tvoji nabídku a přinese zásoby.`, type: 'info' });
-      } else if (totalOffered > nadia.capacity) {
-        messages.unshift({ id: Date.now() + 11, text: `Nabídka je příliš těžká pro Nadiu (max ${nadia.capacity} j.). Snižte množství.`, type: 'warning' });
+        messages.unshift({ id: Date.now() + 11, text: 'Nadia odešla — vezme tvoji nabídku a přinese zásoby.', type: 'info' });
       } else {
-        messages.unshift({ id: Date.now() + 11, text: 'Nadia odešla do města — přinese co najde.', type: 'info' });
+        messages.unshift({ id: Date.now() + 11, text: 'Nadia odešla do města.', type: 'info' });
       }
-
       nadia = { ...nadia, status: 'out', pendingReturn, tradeOffer: { scrap: 0, wood: 0, coal: 0, parts: 0 } };
     }
 
-    // Přechod noc→den: Nadia se vrací + noční loot
     if (phaseJustChanged && phase === 'day' && nadia.met && nadia.status === 'out') {
       const v = () => 0.8 + Math.random() * 0.4;
       const loot = {
@@ -297,23 +349,16 @@ export const useGameStore = create((set, get) => ({
         parts: Math.round(NIGHT_LOOT.parts * v()),
       };
       const waterGain = Math.round(8 * v());
-
       for (const [k, v2] of Object.entries(loot)) resources[k] = (resources[k] ?? 0) + v2;
 
-      // Obchodní return
       let tradeMsg = '';
       if (nadia.pendingReturn) {
-        for (const [k, v2] of Object.entries(nadia.pendingReturn)) {
-          resources[k] = (resources[k] ?? 0) + v2;
-        }
-        const traded = Object.entries(nadia.pendingReturn).map(([k, v2]) => `+${v2} ${k}`).join(', ');
-        tradeMsg = ` | Obchod: ${traded}`;
+        for (const [k, v2] of Object.entries(nadia.pendingReturn)) resources[k] = (resources[k] ?? 0) + v2;
+        tradeMsg = ` | Obchod: ${Object.entries(nadia.pendingReturn).map(([k, v2]) => `+${v2} ${k}`).join(', ')}`;
         nadia = { ...nadia, trust: Math.min(100, nadia.trust + 2) };
       }
 
-      // Náhodný předmět
-      const findRoll = Math.random();
-      if (findRoll > 0.5) {
+      if (Math.random() > 0.5) {
         const finds = [
           { name: 'Lékárnička', icon: '🩹', key: 'medkit'  },
           { name: 'Konzerva',   icon: '🥫', key: 'can'     },
@@ -334,12 +379,10 @@ export const useGameStore = create((set, get) => ({
         type: 'loot',
         waterGain,
       });
-
       nadia = { ...nadia, status: 'home', pendingReturn: null, notification: true };
       nightLootGiven = true;
     }
 
-    // Fallback noční loot bez Nadie
     if (phase === 'night' && !nightLootGiven && !nadia.met) {
       const v = () => 0.8 + Math.random() * 0.4;
       const loot = {
@@ -350,37 +393,39 @@ export const useGameStore = create((set, get) => ({
       };
       for (const [k, v2] of Object.entries(loot)) resources[k] = (resources[k] ?? 0) + v2;
       nightLootGiven = true;
-      messages.unshift({ id: Date.now(), text: `Nachals zásoby venku: +${loot.scrap} šrot, +${loot.wood} dřevo, +${loot.coal} uhlí, +${loot.parts} součástky`, type: 'loot' });
+      messages.unshift({ id: Date.now(), text: `Sám jsi sehnal: +${loot.scrap} šrot, +${loot.wood} dřevo, +${loot.coal} uhlí`, type: 'loot' });
     }
     if (phase === 'day' && nightLootGiven && !nadia.met) nightLootGiven = false;
 
-    // Waterový loot z logu
     const lootWater = (messages[0]?.waterGain && phaseJustChanged && phase === 'day') ? messages[0].waterGain : 0;
 
     // ── Stats ─────────────────────────────────────────────────────────────────
-
     const stats = { ...s.stats };
 
-    // TEPLO
     stats.heat = boilerActive
       ? Math.min(100, stats.heat + 0.04)
       : Math.max(0,   stats.heat - 0.08);
 
-    // JÍDLO
-    stats.food = Math.max(0, stats.food - (greenhouse.built ? 0.015 : 0.03));
+    // Jídlo — pěstírna škáluje podle efektivity pipe
+    const foodDecay = greenhouse.built
+      ? 0.03 * (1 - 0.5 * (pipeEfficiency.greenhouse ?? 0))
+      : 0.03;
+    stats.food = Math.max(0, stats.food - foodDecay);
 
-    // VODA
+    // Voda — sběrač + destilérka škálují podle efektivity pipe
     const waterSources =
-      (collector.built  && boilerActive ? 0.02  : 0) +
-      (distillery.built && boilerActive ? 0.035 : 0);
+      (collector.built  ? 0.02  * (pipeEfficiency.collector  ?? 0) : 0) +
+      (distillery.built ? 0.035 * (pipeEfficiency.distillery ?? 0) : 0);
     stats.water = Math.min(100, Math.max(0, stats.water + waterSources - 0.025 + lootWater));
 
-    // ENERGIE
-    stats.power = dynamo.built
-      ? Math.min(100, stats.power + 0.03)
-      : Math.max(0,   stats.power - 0.01);
+    // Energie — dynamo škáluje
+    if (dynamo.built) {
+      stats.power = Math.min(100, stats.power + 0.03 * (pipeEfficiency.dynamo ?? 0));
+    } else {
+      stats.power = Math.max(0, stats.power - 0.01);
+    }
 
-    // ZDRAVÍ
+    // Zdraví
     const hDecay =
       (stats.heat  < 20 ? 0.05 : 0) +
       (stats.food  < 10 ? 0.08 : 0) +
@@ -391,44 +436,33 @@ export const useGameStore = create((set, get) => ({
       stats.health = Math.min(100, stats.health + 0.005);
     }
 
-    // ── Pavel ─────────────────────────────────────────────────────────────────
+    // Pavel
+    hero.energy = phase === 'day'
+      ? Math.max(0,   hero.energy - 0.015)
+      : Math.min(100, hero.energy + 0.04);
 
-    // Energie: klesá přes den, obnovuje se v noci
-    if (phase === 'day') {
-      hero.energy = Math.max(0, hero.energy - 0.015);
-    } else {
-      hero.energy = Math.min(100, hero.energy + 0.04);
-    }
-
-    // Morálka
     const moraleDelta =
       (stats.heat  > 50 ? 0.01 : -0.02) +
-      (stats.food  > 50 ? 0.005 : (stats.food < 15 ? -0.03 : 0)) +
+      (stats.food  > 50 ? 0.005 : (stats.food  < 15 ? -0.03 : 0)) +
       (stats.water > 50 ? 0.005 : (stats.water < 15 ? -0.02 : 0)) +
       (nadia.met && nadia.status === 'home' ? 0.01 : -0.005);
     hero.morale = Math.min(100, Math.max(0, hero.morale + moraleDelta));
 
-    // ── Varování ──────────────────────────────────────────────────────────────
-
-    if (boiler.fuel === 10 && s.buildings.boiler.fuel > 10) {
-      messages.unshift({ id: Date.now() + 1, text: 'Kotel má málo paliva! Přiložte.', type: 'warning' });
-    }
-    if (!boilerActive && s.buildings.boiler.fuel > 0) {
+    // Varování
+    if (boiler.fuel === 10 && s.buildings.boiler.fuel > 10)
+      messages.unshift({ id: Date.now() + 1, text: 'Kotel má málo paliva!', type: 'warning' });
+    if (!boilerActive && s.buildings.boiler.fuel > 0)
       messages.unshift({ id: Date.now() + 2, text: 'Kotel zhasl! Teplo začíná klesat.', type: 'warning' });
-    }
-    if (stats.water < 15 && s.stats.water >= 15) {
+    if (stats.water < 15 && s.stats.water >= 15)
       messages.unshift({ id: Date.now() + 3, text: 'Dochází voda! Postav sběrač kondenzátu.', type: 'warning' });
-    }
-    if (hero.morale < 20 && s.hero.morale >= 20) {
-      messages.unshift({ id: Date.now() + 4, text: 'Pavel je na dně. Potřebuje teplo, jídlo a společnost.', type: 'warning' });
-    }
-    if (techPhase > s.techPhase) {
-      messages.unshift({ id: Date.now() + 5, text: `Nová fáze odemčena: ${TECH_PHASES.find(t => t.phase === techPhase)?.label} — nové stavby dostupné.`, type: 'info' });
-    }
+    if (hero.morale < 20 && s.hero.morale >= 20)
+      messages.unshift({ id: Date.now() + 4, text: 'Pavel je na dně. Potřebuje teplo a společnost.', type: 'warning' });
+    if (techPhase > s.techPhase)
+      messages.unshift({ id: Date.now() + 5, text: `Nová fáze: ${TECH_PHASE_LABELS.find(t => t.phase === techPhase)?.label} — nové stavby dostupné!`, type: 'info' });
 
     return {
       tick, dayNumber, phase, timeOfDay, nightLootGiven, techPhase,
-      stats, hero, nadia, resources, inventory,
+      stats, hero, nadia, resources, inventory, pipes: newPipes,
       messages: messages.slice(0, 12),
       buildings: { ...s.buildings, boiler },
     };
