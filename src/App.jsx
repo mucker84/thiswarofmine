@@ -3,7 +3,8 @@ import {
   Settings, Heart, Utensils, Flame, Droplets, Zap,
   Hammer, Wrench, Box, Cog, Map, User,
   Wind, CheckSquare, Square, Moon, Sun,
-  PauseCircle, PlayCircle, AlertTriangle, Package, Waves
+  PauseCircle, PlayCircle, AlertTriangle, Package, Waves,
+  FastForward, SkipForward, Building2
 } from 'lucide-react';
 import { useGameStore } from './store/gameStore';
 import { useGameLoop } from './hooks/useGameLoop';
@@ -51,20 +52,43 @@ const ResourceItem = ({ icon, label, value, low }) => (
 );
 
 const TopBar = () => {
-  const { stats, resources, dayNumber, phase, timeOfDay, paused, togglePause } = useGameStore();
+  const { stats, resources, dayNumber, phase, timeOfDay, paused, speed, togglePause, toggleFF, skipPhase } = useGameStore();
   return (
     <div className="flex items-center justify-between bg-stone-950 border-b-2 border-amber-900/50 p-2 text-amber-100 text-sm shadow-md z-10 font-mono flex-shrink-0">
-      <div className="flex space-x-3 items-center bg-stone-900 px-3 py-1 rounded border border-stone-700">
+      <div className="flex space-x-2 items-center bg-stone-900 px-3 py-1 rounded border border-stone-700">
         <span className="font-bold text-amber-500">DEN {dayNumber}</span>
-        <span className="text-stone-400">{formatTime(timeOfDay)}</span>
+        <span className="text-stone-400 w-12">{formatTime(timeOfDay)}</span>
         {phase === 'day'
           ? <Sun size={14} className="text-amber-400" />
           : <Moon size={14} className="text-blue-400" />
         }
-        <button onClick={togglePause} className="ml-1 text-stone-500 hover:text-amber-400 transition" title={paused ? 'Pokračovat' : 'Pauza'}>
+        {/* Pauza */}
+        <button
+          onClick={togglePause}
+          className={`ml-1 transition ${paused ? 'text-amber-400' : 'text-stone-500 hover:text-amber-400'}`}
+          title={paused ? 'Pokračovat' : 'Pauza'}
+        >
           {paused ? <PlayCircle size={16} /> : <PauseCircle size={16} />}
         </button>
+        {/* FF 5× */}
+        <button
+          onClick={toggleFF}
+          className={`transition ${speed === 5 ? 'text-amber-400' : 'text-stone-500 hover:text-amber-400'}`}
+          title={speed === 5 ? 'Normální rychlost' : 'Rychloposun 5×'}
+        >
+          <FastForward size={16} />
+        </button>
+        {speed === 5 && <span className="text-xs text-amber-500 font-bold">5×</span>}
         {paused && <span className="text-xs text-amber-600 animate-pulse">PAUZA</span>}
+        {/* Přeskočit fázi */}
+        <button
+          onClick={skipPhase}
+          className="text-stone-600 hover:text-stone-400 transition ml-1"
+          title={phase === 'day' ? 'Přeskočit na noc' : 'Přeskočit na den'}
+        >
+          <SkipForward size={15} />
+        </button>
+        <span className="text-[10px] text-stone-600">{phase === 'day' ? '→noc' : '→den'}</span>
       </div>
 
       <div className="flex space-x-3">
@@ -91,35 +115,69 @@ const TopBar = () => {
 // ─── LEFT SIDEBAR ────────────────────────────────────────────────────────────
 
 const LeftSidebar = () => {
-  const { activeLeftTab, setActiveLeftTab, tasks, toggleTask, messages } = useGameStore();
+  const { activeLeftTab, setActiveLeftTab, tasks, toggleTask, messages, inventory, setActiveModal } = useGameStore();
+
+  const TABS = [
+    { key: 'tasks',     label: 'Úkoly' },
+    { key: 'inventory', label: 'Inv.'  },
+    { key: 'log',       label: 'Log'   },
+  ];
+
+  // Suroviny jako první řada inventáře
+  const { resources } = useGameStore();
+  const resourceSlots = [
+    { key: 'scrap', icon: <Cog   size={16} className="text-stone-400" />, label: 'Šrot',       value: resources.scrap },
+    { key: 'wood',  icon: <Box   size={16} className="text-amber-700" />, label: 'Dřevo',      value: resources.wood  },
+    { key: 'coal',  icon: <Flame size={16} className="text-orange-600"/>, label: 'Uhlí',       value: resources.coal  },
+    { key: 'parts', icon: <Wrench size={16} className="text-blue-500"  />, label: 'Součástky', value: resources.parts },
+  ];
+
   return (
     <div className="w-64 bg-stone-900/90 border-r-2 border-amber-900/30 flex shadow-lg flex-col font-mono z-10 h-full flex-shrink-0">
-      <div className="flex flex-col space-y-2 p-2 border-b border-stone-800">
-        <button className="p-3 bg-stone-800 rounded hover:bg-stone-700 border border-stone-700 transition flex justify-center">
-          <Hammer className="text-stone-400" size={22} />
+      {/* Akční tlačítka */}
+      <div className="flex space-x-2 p-2 border-b border-stone-800">
+        <button
+          onClick={() => setActiveModal('buildings_overview')}
+          className="flex-1 py-2 bg-stone-800 rounded hover:bg-amber-900/40 border border-stone-700 hover:border-amber-700 transition flex items-center justify-center gap-2 group"
+          title="Přehled staveb"
+        >
+          <Building2 size={18} className="text-stone-400 group-hover:text-amber-400" />
+          <span className="text-[10px] text-stone-500 group-hover:text-amber-300 uppercase tracking-wider">Stavby</span>
         </button>
-        <button className="p-3 bg-stone-800 rounded hover:bg-stone-700 border border-stone-700 transition flex justify-center">
-          <Wrench className="text-stone-400" size={22} />
+        <button
+          onClick={() => setActiveLeftTab('crafting')}
+          className={`flex-1 py-2 rounded border transition flex items-center justify-center gap-2 group ${
+            activeLeftTab === 'crafting'
+              ? 'bg-amber-900/30 border-amber-700 text-amber-400'
+              : 'bg-stone-800 border-stone-700 hover:border-amber-700 hover:bg-amber-900/20'
+          }`}
+          title="Crafting"
+        >
+          <Wrench size={18} className={activeLeftTab === 'crafting' ? 'text-amber-400' : 'text-stone-400 group-hover:text-amber-400'} />
+          <span className="text-[10px] text-stone-500 group-hover:text-amber-300 uppercase tracking-wider">Craft</span>
         </button>
       </div>
 
+      {/* Tabs */}
       <div className="flex border-b border-stone-800 text-xs">
-        {['tasks', 'inventory', 'log'].map(tab => (
+        {TABS.map(({ key, label }) => (
           <button
-            key={tab}
-            className={`flex-1 py-2 text-center transition uppercase tracking-wider ${
-              activeLeftTab === tab
+            key={key}
+            className={`flex-1 py-2 text-center transition ${
+              activeLeftTab === key
                 ? 'bg-stone-800 text-amber-500 font-bold border-b-2 border-amber-500'
                 : 'text-stone-500 hover:bg-stone-800/50'
             }`}
-            onClick={() => setActiveLeftTab(tab)}
+            onClick={() => setActiveLeftTab(key)}
           >
-            {tab === 'tasks' ? 'Úkoly' : tab === 'inventory' ? 'Inv.' : 'Log'}
+            {label}
           </button>
         ))}
       </div>
 
       <div className="p-3 flex-1 overflow-y-auto">
+
+        {/* ÚKOLY */}
         {activeLeftTab === 'tasks' && (
           <div className="space-y-3">
             {tasks.map(task => (
@@ -135,25 +193,59 @@ const LeftSidebar = () => {
           </div>
         )}
 
+        {/* INVENTÁŘ */}
         {activeLeftTab === 'inventory' && (
-          <div className="grid grid-cols-3 gap-2">
-            {[...Array(12)].map((_, i) => (
-              <div key={i} className="aspect-square bg-stone-950 border border-stone-800 rounded flex items-center justify-center hover:border-amber-700/50 transition cursor-pointer">
-                {i === 0 && <Flame className="text-stone-500" size={18} />}
-                {i === 1 && <Box   className="text-stone-500" size={18} />}
-                {i === 2 && <Cog   className="text-stone-500" size={18} />}
-              </div>
-            ))}
+          <div className="space-y-3">
+            {/* Suroviny — pevná horní část */}
+            <div className="text-[10px] text-stone-600 uppercase tracking-wider">Suroviny</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {resourceSlots.map(r => (
+                <div
+                  key={r.key}
+                  className="bg-stone-950 border border-stone-800 rounded p-2 flex items-center gap-2 hover:border-amber-800/50 transition"
+                  title={r.label}
+                >
+                  {r.icon}
+                  <div>
+                    <div className="text-[9px] text-stone-600">{r.label}</div>
+                    <div className="text-sm font-bold text-stone-200 tabular-nums">{r.value}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Nalezené předměty */}
+            <div className="text-[10px] text-stone-600 uppercase tracking-wider mt-2">Předměty</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {inventory.map(item => (
+                <div
+                  key={item.id}
+                  className="aspect-square bg-stone-950 border border-stone-800 rounded flex flex-col items-center justify-center hover:border-amber-700/50 transition cursor-pointer p-1"
+                  title={item.name}
+                >
+                  <span className="text-xl leading-none">{item.icon}</span>
+                  <span className="text-[9px] text-stone-500 mt-0.5 text-center leading-tight">{item.name}</span>
+                  {item.qty > 1 && (
+                    <span className="text-[9px] font-bold text-amber-600">×{item.qty}</span>
+                  )}
+                </div>
+              ))}
+              {/* Prázdné sloty */}
+              {[...Array(Math.max(0, 12 - inventory.length))].map((_, i) => (
+                <div key={`empty-${i}`} className="aspect-square bg-stone-950/50 border border-stone-800/50 rounded" />
+              ))}
+            </div>
           </div>
         )}
 
+        {/* LOG */}
         {activeLeftTab === 'log' && (
           <div className="space-y-2">
             {messages.length === 0 && <p className="text-stone-600 text-xs">Zatím žádné záznamy.</p>}
             {messages.map(msg => (
               <div
                 key={msg.id}
-                className={`text-xs p-2 rounded border ${
+                className={`text-xs p-2 rounded border leading-snug ${
                   msg.type === 'warning' ? 'bg-red-950/50 border-red-800 text-red-300' :
                   msg.type === 'loot'    ? 'bg-green-950/50 border-green-800 text-green-300' :
                                           'bg-stone-950 border-stone-800 text-stone-400'
@@ -166,6 +258,29 @@ const LeftSidebar = () => {
             ))}
           </div>
         )}
+
+        {/* CRAFTING */}
+        {activeLeftTab === 'crafting' && (
+          <div className="space-y-2">
+            <div className="text-[10px] text-stone-600 uppercase tracking-wider mb-2">Dostupné recepty</div>
+            {[
+              { name: 'Obvaz',       icon: '🩹', cost: 'šrot ×5',             desc: 'Obnoví trochu zdraví' },
+              { name: 'Svíčka',      icon: '🕯',  cost: 'dřevo ×2',            desc: 'Světlo a teplo' },
+              { name: 'Filtr vody',  icon: '💧', cost: 'šrot ×10, dřevo ×3',  desc: 'Čistí kontaminovanou vodu' },
+            ].map(r => (
+              <div key={r.name} className="bg-stone-950 border border-stone-800 rounded p-2 opacity-60">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span>{r.icon}</span>
+                  <span className="text-xs font-bold text-stone-400">{r.name}</span>
+                </div>
+                <div className="text-[10px] text-stone-600">{r.cost}</div>
+                <div className="text-[10px] text-stone-700 italic">{r.desc}</div>
+                <div className="text-[9px] text-amber-800 mt-1">Vyžaduje: Dílna</div>
+              </div>
+            ))}
+          </div>
+        )}
+
       </div>
     </div>
   );
@@ -638,17 +753,55 @@ const Modal = () => {
       return <p className="text-stone-400 text-sm">Výprava vychází každou noc automaticky a přináší suroviny. Rozšíření (volba lokace, rizika) přijde v další fázi.</p>;
     }
 
+    if (activeModal === 'buildings_overview') {
+      const allBuildings = [
+        { key: 'collector',  icon: '💧', label: 'Sběrač kondenzátu', effect: '+voda (závisí na kotli)' },
+        { key: 'dynamo',     icon: '⚡', label: 'Dynamo',            effect: '+energie'                },
+        { key: 'distillery', icon: '💧', label: 'Destilérka',        effect: '++voda (závisí na kotli)'},
+        { key: 'greenhouse', icon: '🌱', label: 'Pěstírna',          effect: '-spotřeba jídla'         },
+        { key: 'workshop',   icon: '🔧', label: 'Dílna',             effect: 'crafting'                },
+      ];
+      return (
+        <div className="space-y-2">
+          {allBuildings.map(b => {
+            const isBuilt = buildings[b.key]?.built;
+            return (
+              <div
+                key={b.key}
+                className={`flex items-center gap-3 p-2 rounded border cursor-pointer hover:border-amber-700/50 transition ${
+                  isBuilt ? 'bg-stone-950 border-stone-700' : 'bg-stone-950/50 border-stone-800/50'
+                }`}
+                onClick={() => setActiveModal(`build_${b.key}`)}
+              >
+                <span className="text-lg">{b.icon}</span>
+                <div className="flex-1">
+                  <div className={`text-sm font-bold ${isBuilt ? 'text-stone-200' : 'text-stone-500'}`}>{b.label}</div>
+                  <div className="text-[10px] text-stone-600">{b.effect}</div>
+                </div>
+                <div className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                  isBuilt ? 'text-green-400 bg-green-900/40 border-green-700/40' : 'text-amber-600 bg-amber-900/20 border-amber-800/30'
+                }`}>
+                  {isBuilt ? 'AKTIVNÍ' : 'STAVĚT'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
     return null;
   };
 
   const titleMap = {
-    boiler:            '⚙ HLAVNÍ KOTEL',
-    build_collector:   '💧 SBĚRAČ KONDENZÁTU',
-    build_dynamo:      '⚡ DYNAMO',
-    build_distillery:  '💧 DESTILÉRKA',
-    build_greenhouse:  '🌱 PĚSTÍRNA',
-    build_workshop:    '🔧 DÍLNA',
-    map:               '🗺 MAPA OKOLÍ',
+    boiler:              '⚙ HLAVNÍ KOTEL',
+    build_collector:     '💧 SBĚRAČ KONDENZÁTU',
+    build_dynamo:        '⚡ DYNAMO',
+    build_distillery:    '💧 DESTILÉRKA',
+    build_greenhouse:    '🌱 PĚSTÍRNA',
+    build_workshop:      '🔧 DÍLNA',
+    map:                 '🗺 MAPA OKOLÍ',
+    buildings_overview:  '🏗 PŘEHLED STAVEB',
   };
 
   return (

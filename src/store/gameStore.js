@@ -45,6 +45,11 @@ export const useGameStore = create((set, get) => ({
   // --- LOG ---
   messages: [],
 
+  // --- INVENTÁŘ (nalezené předměty ze scavengingu) ---
+  inventory: [
+    // { id, name, qty, icon } — icon je emoji nebo string
+  ],
+
   // --- ÚKOLY ---
   tasks: [
     { id: 1, text: 'Přiložit do kotle', done: false },
@@ -56,12 +61,49 @@ export const useGameStore = create((set, get) => ({
   activeModal: null,
   activeLeftTab: 'tasks',
   paused: false,
+  speed: 1, // 1 = normální, 5 = FF
 
   // ─── AKCE ──────────────────────────────────────────────────────────────────
 
   setActiveModal: (modal) => set({ activeModal: modal }),
   setActiveLeftTab: (tab)  => set({ activeLeftTab: tab }),
-  togglePause: ()          => set(s => ({ paused: !s.paused })),
+  togglePause: () => set(s => ({ paused: !s.paused })),
+  toggleFF:    () => set(s => ({ speed: s.speed === 1 ? 5 : 1 })),
+
+  // Přeskočí zbytek aktuální fáze (den → noc, noc → nový den)
+  skipPhase: () => set(s => {
+    const cyclePos = s.tick % TOTAL_CYCLE;
+    const inDay = cyclePos < DAY_TICKS;
+    const remaining = inDay ? DAY_TICKS - cyclePos : TOTAL_CYCLE - cyclePos;
+
+    // Proporcionální decay za přeskočený čas
+    const stats = { ...s.stats };
+    const { boiler, greenhouse } = s.buildings;
+    const boilerActive = boiler.fuel > 0;
+    const foodDecay  = (greenhouse.built ? 0.015 : 0.03) * remaining;
+    const waterDecay = 0.025 * remaining;
+    const heatChange = boilerActive ? 0.04 * remaining : -0.08 * remaining;
+    stats.food  = Math.max(0, stats.food  - foodDecay);
+    stats.water = Math.max(0, stats.water - waterDecay);
+    stats.heat  = Math.min(100, Math.max(0, stats.heat + heatChange));
+
+    const newTick = s.tick + remaining;
+    const newCyclePos = newTick % TOTAL_CYCLE;
+    const newPhase = newCyclePos < DAY_TICKS ? 'day' : 'night';
+    const dayNumber = s.dayNumber + (inDay ? 0 : 1);
+
+    let timeOfDay;
+    if (newPhase === 'day') {
+      timeOfDay = 360 + Math.floor((newCyclePos / DAY_TICKS) * 960);
+    } else {
+      timeOfDay = (1320 + Math.floor(((newCyclePos - DAY_TICKS) / NIGHT_TICKS) * 480)) % 1440;
+    }
+
+    const label = inDay ? 'Den přeskočen — nastává noc.' : 'Noc přeskočena — nový den.';
+    const messages = [{ id: Date.now(), text: label, type: 'info' }, ...s.messages].slice(0, 10);
+
+    return { tick: newTick, phase: newPhase, timeOfDay, dayNumber, stats, messages, nightLootGiven: false };
+  }),
   toggleTask:  (id)        => set(s => ({
     tasks: s.tasks.map(t => t.id === id ? { ...t, done: !t.done } : t),
   })),
@@ -156,13 +198,43 @@ export const useGameStore = create((set, get) => ({
         coal:  resources.coal  + loot.coal,
         parts: resources.parts + loot.parts,
       };
+
+      // Občas nalezené předměty v inventáři
+      const findRoll = Math.random();
+      let newInventory = [...s.inventory];
+      if (findRoll > 0.4) {
+        const finds = [
+          { name: 'Lékárnička', icon: '🩹', key: 'medkit' },
+          { name: 'Konzerva',   icon: '🥫', key: 'can'    },
+          { name: 'Svíčka',     icon: '🕯',  key: 'candle' },
+          { name: 'Nůž',        icon: '🔪', key: 'knife'  },
+          { name: 'Deka',       icon: '🛏',  key: 'blanket'},
+        ];
+        const found = finds[Math.floor(Math.random() * finds.length)];
+        const existing = newInventory.find(i => i.key === found.key);
+        if (existing) {
+          newInventory = newInventory.map(i => i.key === found.key ? { ...i, qty: i.qty + 1 } : i);
+        } else {
+          newInventory = [...newInventory, { id: Date.now(), key: found.key, name: found.name, icon: found.icon, qty: 1 }];
+        }
+      }
+
       nightLootGiven = true;
+      const findMsg = findRoll > 0.4 ? ` + předmět` : '';
       messages.unshift({
         id: Date.now(),
-        text: `Výprava přinesla: +${loot.scrap} šrot, +${loot.wood} dřevo, +${loot.coal} uhlí, +${loot.parts} součástky, +${waterGain} vody`,
+        text: `Výprava přinesla: +${loot.scrap} šrot, +${loot.wood} dřevo, +${loot.coal} uhlí, +${loot.parts} součástky, +${waterGain} vody${findMsg}`,
         type: 'loot',
-        waterGain, // zpracuje se dole ve stats
+        waterGain,
       });
+
+      return {
+        tick, dayNumber, phase, timeOfDay, nightLootGiven,
+        stats: s.stats, resources,
+        messages: messages.slice(0, 10),
+        buildings: { ...s.buildings, boiler },
+        inventory: newInventory,
+      };
     }
     if (phase === 'day' && nightLootGiven) nightLootGiven = false;
 
