@@ -642,7 +642,7 @@ const PipeOverlay = () => {
 const GameCanvas = () => {
   const { buildings, setActiveModal, phase, stats } = useGameStore();
   const { boiler, dynamo, greenhouse, distillery, collector } = buildings;
-  const boilerActive = boiler.fuel > 0;
+  const boilerActive = boiler.fuelTimer > 0;
 
   return (
     <div className={`flex-1 relative overflow-hidden flex items-center justify-center transition-colors duration-3000 ${
@@ -665,7 +665,7 @@ const GameCanvas = () => {
             left: '50%', top: '50%',
             transform: 'translate(-50%, -50%)',
             width: '400px', height: '400px',
-            background: `radial-gradient(circle, rgba(251,146,60,${0.03 + (boiler.fuel / 100) * 0.06}) 0%, transparent 70%)`,
+            background: `radial-gradient(circle, rgba(251,146,60,${0.03 + Math.min(1, boiler.fuelTimer / 200) * 0.06}) 0%, transparent 70%)`,
           }}
         />
       )}
