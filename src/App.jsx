@@ -887,7 +887,7 @@ const MiniBar = ({ value, color, label }) => {
 };
 
 const Modal = () => {
-  const { activeModal, setActiveModal, buildings, buildBuilding, resources, stats, hero, nadia, setTradeOffer, techPhase, pipes, repairPipe, replacePipe, upgradePipe, craftGaskets, cleanBoiler, addFuel, pumpWater, ventPressure, radioMessages, rain } = useGameStore();
+  const { activeModal, setActiveModal, buildings, buildBuilding, resources, stats, hero, nadia, setTradeOffer, techPhase, pipes, repairPipe, replacePipe, upgradePipe, craftGaskets, cleanBoiler, addFuel, pumpWater, ventPressure, radioMessages, rain, reservoirWater } = useGameStore();
   const [tradeInput, setTradeInput] = useState({ scrap: 0, wood: 0, coal: 0, parts: 0 });
   if (!activeModal) return null;
 
@@ -966,11 +966,11 @@ const Modal = () => {
             <div className="grid grid-cols-2 gap-1.5">
               <button
                 onClick={() => pumpWater()}
-                disabled={resources.reservoirWater < 2 || water >= 100}
+                disabled={reservoirWater < 2 || water >= 100}
                 className="py-2 px-2 bg-blue-900/30 border border-blue-700/60 text-blue-300 text-[10px] font-mono rounded hover:bg-blue-900/60 transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 💧 Přečerpat<br/>
-                <span className="text-[8px]">{Math.round(resources.reservoirWater || 0)} L v sudu</span>
+                <span className="text-[8px]">{Math.round(reservoirWater || 0)} L v sudu</span>
               </button>
               <button
                 onClick={() => ventPressure()}
