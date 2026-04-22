@@ -1,13 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Settings, Heart, Utensils, Flame, Droplets, Zap,
   Hammer, Wrench, Box, Cog, Map, User,
   Wind, CheckSquare, Square, Moon, Sun,
   PauseCircle, PlayCircle, AlertTriangle, Package, Waves,
-  FastForward, SkipForward, Building2
+  FastForward, SkipForward, Building2, TrendingUp, ArrowLeftRight
 } from 'lucide-react';
 import { useGameStore } from './store/gameStore';
 import { useGameLoop } from './hooks/useGameLoop';
+import { BUILDING_PHASE, TECH_PHASE_LABELS } from './store/gameStore';
 
 function formatTime(minutes) {
   const h = Math.floor(minutes / 60) % 24;
@@ -576,6 +577,32 @@ const GameCanvas = () => {
 
 // ─── BOTTOM BAR ──────────────────────────────────────────────────────────────
 
+const CharactersButton = () => {
+  const { nadia, hero, setActiveModal, clearNadiaNotification } = useGameStore();
+  const hasNotif = nadia.notification || hero.morale < 25;
+  return (
+    <div className="relative">
+      <button
+        onClick={() => { setActiveModal('characters'); clearNadiaNotification(); }}
+        className={`flex flex-col items-center justify-center p-2 rounded-lg border transition group w-24 h-14 ${
+          hasNotif
+            ? 'bg-amber-900/30 border-amber-600 hover:bg-amber-900/50'
+            : 'bg-stone-900 border-stone-700 hover:bg-stone-800 hover:border-amber-500'
+        }`}
+      >
+        <User size={18} className={hasNotif ? 'text-amber-400' : 'text-stone-400 group-hover:text-amber-300'} />
+        <span className="text-[9px] font-mono font-bold text-stone-500 group-hover:text-amber-100 uppercase tracking-wider mt-0.5">Postavy</span>
+      </button>
+      {hasNotif && (
+        <>
+          <div className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-red-600 rounded-full border border-stone-900 animate-ping" />
+          <div className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-red-600 rounded-full border border-stone-900" />
+        </>
+      )}
+    </div>
+  );
+};
+
 const ActionButton = ({ icon, label, onClick, highlight }) => (
   <button
     onClick={onClick}
@@ -591,14 +618,27 @@ const ActionButton = ({ icon, label, onClick, highlight }) => (
 );
 
 const BottomBar = () => {
-  const { setActiveModal, phase } = useGameStore();
+  const { setActiveModal, phase, techPhase } = useGameStore();
+  const techLabel = TECH_PHASE_LABELS.find(t => t.phase === techPhase);
   return (
     <div className="bg-stone-950 border-t-2 border-amber-900/50 p-2 flex items-center justify-between z-10 flex-shrink-0">
-      <div className="flex items-center gap-2 text-xs font-mono text-stone-600 pl-2">
-        {phase === 'night'
-          ? <span className="text-blue-500 animate-pulse">◆ NOC — výprava venku</span>
-          : <span className="text-amber-700">◆ DEN — spravuj přístřešek</span>
-        }
+      <div className="flex items-center gap-3 pl-2">
+        <span className="text-xs font-mono text-stone-600">
+          {phase === 'night'
+            ? <span className="text-blue-500">◆ NOC</span>
+            : <span className="text-amber-700">◆ DEN</span>
+          }
+        </span>
+        {/* Tech fáze badge */}
+        <button
+          onClick={() => setActiveModal('tech_tree')}
+          className="flex items-center gap-1.5 bg-stone-900 border border-stone-700 hover:border-amber-700 rounded px-2 py-1 transition"
+          title="Technologický strom"
+        >
+          <TrendingUp size={12} className="text-amber-600" />
+          <span className="text-[10px] font-mono text-amber-700 font-bold">FÁZE {techPhase}</span>
+          <span className="text-[10px] font-mono text-stone-600">{techLabel?.label}</span>
+        </button>
       </div>
 
       <div className="flex flex-col items-center">
@@ -627,8 +667,7 @@ const BottomBar = () => {
       <div className="flex space-x-2 pr-2">
         <ActionButton icon={<Hammer size={18} />} label="Crafting" />
         <ActionButton icon={<Map    size={18} />} label="Mapa" onClick={() => setActiveModal('map')} />
-        <ActionButton icon={<User   size={18} />} label="Postavy" highlight />
-      </div>
+        <CharactersButton /></div>
     </div>
   );
 };
@@ -645,8 +684,23 @@ const BUILDING_DEFS = {
 
 const RESOURCE_LABELS = { scrap: 'Šrot', wood: 'Dřevo', coal: 'Uhlí', parts: 'Součástky' };
 
+// Mini stat bar pro postavy
+const MiniBar = ({ value, color, label }) => {
+  const pct = Math.round(Math.min(100, Math.max(0, value)));
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] text-stone-500 w-14 text-right">{label}</span>
+      <div className="flex-1 h-2 bg-stone-900 rounded-sm overflow-hidden border border-stone-800">
+        <div className={`h-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-[10px] font-mono text-stone-400 w-7 text-right">{pct}</span>
+    </div>
+  );
+};
+
 const Modal = () => {
-  const { activeModal, setActiveModal, buildings, stokeCoal, stokeWood, buildBuilding, resources, stats } = useGameStore();
+  const { activeModal, setActiveModal, buildings, stokeCoal, stokeWood, buildBuilding, resources, stats, hero, nadia, setTradeOffer, techPhase } = useGameStore();
+  const [tradeInput, setTradeInput] = useState({ scrap: 0, wood: 0, coal: 0, parts: 0 });
   if (!activeModal) return null;
 
   const renderContent = () => {
@@ -715,6 +769,8 @@ const Modal = () => {
     if (def) {
       const alreadyBuilt = buildings[buildKey]?.built;
       const affordable = Object.entries(def.costs).every(([item, amount]) => (resources[item] ?? 0) >= amount);
+      const requiredPhase = BUILDING_PHASE[buildKey] ?? 1;
+      const locked = techPhase < requiredPhase;
       return (
         <div className="space-y-4">
           <p className="text-stone-300 text-sm">{def.desc}</p>
@@ -735,6 +791,8 @@ const Modal = () => {
           </div>
           {alreadyBuilt
             ? <div className="text-green-400 font-mono text-sm">✓ Již postaveno a aktivní.</div>
+            : locked
+            ? <div className="text-stone-500 font-mono text-sm text-center py-2">🔒 Odemkne se ve fázi {requiredPhase} (den {TECH_PHASE_LABELS.find(t => t.phase === requiredPhase)?.fromDay})</div>
             : (
               <button
                 onClick={() => { buildBuilding(buildKey); setActiveModal(null); }}
@@ -753,35 +811,191 @@ const Modal = () => {
       return <p className="text-stone-400 text-sm">Výprava vychází každou noc automaticky a přináší suroviny. Rozšíření (volba lokace, rizika) přijde v další fázi.</p>;
     }
 
+    // ── Postavy ───────────────────────────────────────────────────────────────
+    if (activeModal === 'characters') {
+      return (
+        <div className="space-y-4">
+          {/* Pavel */}
+          <div className="bg-stone-950 border border-stone-800 rounded-lg p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-stone-700 border-2 border-amber-800 flex items-center justify-center text-lg">👨</div>
+              <div>
+                <div className="font-bold text-stone-200 font-mono">{hero.name}</div>
+                <div className="text-[10px] text-stone-500">Hlavní hrdina · sám</div>
+              </div>
+              <div className={`ml-auto text-xs px-2 py-0.5 rounded-full border font-mono ${
+                hero.morale > 60 ? 'text-green-400 bg-green-900/30 border-green-800/40' :
+                hero.morale > 30 ? 'text-amber-400 bg-amber-900/30 border-amber-800/40' :
+                                   'text-red-400 bg-red-900/30 border-red-800/40 animate-pulse'
+              }`}>
+                {hero.morale > 60 ? 'V pohodě' : hero.morale > 30 ? 'Unavený' : 'Na dně'}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <MiniBar label="Zdraví"  value={stats.health} color="bg-red-600"    />
+              <MiniBar label="Hlad"    value={stats.food}   color="bg-orange-500" />
+              <MiniBar label="Žízeň"   value={stats.water}  color="bg-blue-500"   />
+              <MiniBar label="Morálka" value={hero.morale}  color="bg-purple-600" />
+              <MiniBar label="Energie" value={hero.energy}  color="bg-yellow-500" />
+            </div>
+          </div>
+
+          {/* Nadia */}
+          {!nadia.met ? (
+            <div className="bg-stone-950/50 border border-stone-800/50 rounded-lg p-4 text-center">
+              <div className="text-stone-600 text-sm">Zatím sám...</div>
+              <div className="text-[10px] text-stone-700 mt-1">Nadia přijde den 3</div>
+            </div>
+          ) : (
+            <div className="bg-stone-950 border border-stone-800 rounded-lg p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-stone-700 border-2 border-blue-800 flex items-center justify-center text-lg">👩</div>
+                <div>
+                  <div className="font-bold text-stone-200 font-mono">Nadia</div>
+                  <div className="text-[10px] text-stone-500">Obchodnice · kulhá</div>
+                </div>
+                <div className={`ml-auto text-xs px-2 py-0.5 rounded-full border font-mono ${
+                  nadia.status === 'home'
+                    ? 'text-green-400 bg-green-900/30 border-green-800/40'
+                    : 'text-blue-400 bg-blue-900/30 border-blue-800/40 animate-pulse'
+                }`}>
+                  {nadia.status === 'home' ? 'Doma' : 'Venku'}
+                </div>
+              </div>
+              <div className="space-y-1.5 mb-3">
+                <MiniBar label="Důvěra"   value={nadia.trust}    color="bg-blue-500"  />
+                <MiniBar label="Kapacita" value={nadia.capacity} color="bg-stone-500" />
+              </div>
+              {nadia.status === 'home' && (
+                <button
+                  onClick={() => setActiveModal('nadia_trade')}
+                  className="w-full py-1.5 bg-blue-900/30 border border-blue-800/50 text-blue-300 text-xs font-mono rounded hover:bg-blue-900/50 transition flex items-center justify-center gap-2"
+                >
+                  <ArrowLeftRight size={12} /> Nastavit obchodní nabídku
+                </button>
+              )}
+              {nadia.status === 'out' && (
+                <div className="text-[10px] text-stone-600 text-center">Vrátí se ráno s zásobami.</div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── Nadia trade ───────────────────────────────────────────────────────────
+    if (activeModal === 'nadia_trade') {
+      const totalOffered = Object.values(tradeInput).reduce((a, b) => a + b, 0);
+      const overCapacity = totalOffered > nadia.capacity;
+      const TRADE_PREVIEW = {
+        scrap: (v) => `→ ~${Math.floor(v / 5)} uhlí`,
+        wood:  (v) => `→ ~${Math.floor(v * 1.5)} šrot`,
+        parts: (v) => `→ ~${Math.floor(v * 7)} šrot`,
+        coal:  (v) => `→ ~${Math.floor(v * 2)} dřevo`,
+      };
+      return (
+        <div className="space-y-3">
+          <p className="text-stone-400 text-xs">Nadia vezme zásoby přes noc a vymění je ve městě. Důvěra: <span className="text-blue-400 font-bold">{nadia.trust}</span>/100 (lepší kurzy s časem).</p>
+          <div className="text-[10px] text-stone-600 uppercase tracking-wider">Co nabídneš:</div>
+          {(['scrap', 'wood', 'coal', 'parts']).map(key => {
+            const labels = { scrap: 'Šrot', wood: 'Dřevo', coal: 'Uhlí', parts: 'Součástky' };
+            const v = tradeInput[key];
+            return (
+              <div key={key} className="bg-stone-950 border border-stone-800 rounded p-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-stone-400">{labels[key]} <span className="text-stone-600">(máš: {resources[key]})</span></span>
+                  <span className="text-[10px] text-stone-600">{v > 0 ? TRADE_PREVIEW[key](v) : ''}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setTradeInput(t => ({ ...t, [key]: Math.max(0, t[key] - 5) }))} className="w-7 h-7 bg-stone-800 rounded text-stone-400 hover:text-amber-300 text-sm font-bold">−</button>
+                  <div className="flex-1 text-center font-mono font-bold text-stone-200 text-sm">{v}</div>
+                  <button onClick={() => setTradeInput(t => ({ ...t, [key]: Math.min(resources[key], t[key] + 5) }))} className="w-7 h-7 bg-stone-800 rounded text-stone-400 hover:text-amber-300 text-sm font-bold">+</button>
+                </div>
+              </div>
+            );
+          })}
+          <div className={`text-xs font-mono text-center ${overCapacity ? 'text-red-400' : 'text-stone-500'}`}>
+            Celkem: {totalOffered} / {nadia.capacity} j. {overCapacity && '⚠ přetíženo!'}
+          </div>
+          <button
+            onClick={() => { setTradeOffer(tradeInput); setActiveModal('characters'); }}
+            disabled={overCapacity || totalOffered === 0}
+            className="w-full py-2 bg-blue-900/40 border border-blue-700 text-blue-200 font-bold font-mono rounded hover:bg-blue-900/60 transition disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+          >
+            Potvrdit nabídku
+          </button>
+        </div>
+      );
+    }
+
+    // ── Tech tree ─────────────────────────────────────────────────────────────
+    if (activeModal === 'tech_tree') {
+      return (
+        <div className="space-y-3">
+          {TECH_PHASE_LABELS.map(tp => {
+            const unlocked = techPhase >= tp.phase;
+            const current  = techPhase === tp.phase;
+            return (
+              <div key={tp.phase} className={`p-3 rounded border ${
+                current  ? 'bg-amber-900/20 border-amber-700' :
+                unlocked ? 'bg-stone-900 border-stone-700' :
+                           'bg-stone-950/50 border-stone-800/50 opacity-50'
+              }`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-xs font-mono font-bold ${unlocked ? 'text-amber-400' : 'text-stone-600'}`}>
+                    FÁZE {tp.phase}
+                  </span>
+                  <span className={`text-sm font-bold ${unlocked ? 'text-stone-200' : 'text-stone-600'}`}>{tp.label}</span>
+                  {current && <span className="ml-auto text-[10px] text-amber-600 font-mono">← AKTUÁLNÍ</span>}
+                  {!unlocked && <span className="ml-auto text-[10px] text-stone-600">od dne {tp.fromDay}</span>}
+                </div>
+                <div className="text-[10px] text-stone-600">
+                  {tp.phase === 1 && 'Kotel, Sběrač kondenzátu'}
+                  {tp.phase === 2 && 'Dynamo, Destilérka'}
+                  {tp.phase === 3 && 'Pěstírna'}
+                  {tp.phase === 4 && 'Dílna, Mechanický telegraf (brzy)'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
     if (activeModal === 'buildings_overview') {
       const allBuildings = [
-        { key: 'collector',  icon: '💧', label: 'Sběrač kondenzátu', effect: '+voda (závisí na kotli)' },
-        { key: 'dynamo',     icon: '⚡', label: 'Dynamo',            effect: '+energie'                },
-        { key: 'distillery', icon: '💧', label: 'Destilérka',        effect: '++voda (závisí na kotli)'},
-        { key: 'greenhouse', icon: '🌱', label: 'Pěstírna',          effect: '-spotřeba jídla'         },
-        { key: 'workshop',   icon: '🔧', label: 'Dílna',             effect: 'crafting'                },
+        { key: 'collector',  icon: '💧', label: 'Sběrač kondenzátu', effect: '+voda (závisí na kotli)', phase: 1 },
+        { key: 'dynamo',     icon: '⚡', label: 'Dynamo',            effect: '+energie',                phase: 2 },
+        { key: 'distillery', icon: '💧', label: 'Destilérka',        effect: '++voda (závisí na kotli)',phase: 2 },
+        { key: 'greenhouse', icon: '🌱', label: 'Pěstírna',          effect: '-spotřeba jídla',         phase: 3 },
+        { key: 'workshop',   icon: '🔧', label: 'Dílna',             effect: 'crafting',                phase: 4 },
       ];
       return (
         <div className="space-y-2">
           {allBuildings.map(b => {
-            const isBuilt = buildings[b.key]?.built;
+            const isBuilt  = buildings[b.key]?.built;
+            const locked   = techPhase < b.phase;
             return (
               <div
                 key={b.key}
-                className={`flex items-center gap-3 p-2 rounded border cursor-pointer hover:border-amber-700/50 transition ${
-                  isBuilt ? 'bg-stone-950 border-stone-700' : 'bg-stone-950/50 border-stone-800/50'
+                className={`flex items-center gap-3 p-2 rounded border transition ${
+                  locked ? 'opacity-40 cursor-not-allowed border-stone-800/40' :
+                  isBuilt ? 'bg-stone-950 border-stone-700 cursor-pointer hover:border-amber-700/50' :
+                            'bg-stone-950/50 border-stone-800/50 cursor-pointer hover:border-amber-700/50'
                 }`}
-                onClick={() => setActiveModal(`build_${b.key}`)}
+                onClick={() => !locked && setActiveModal(`build_${b.key}`)}
               >
                 <span className="text-lg">{b.icon}</span>
                 <div className="flex-1">
-                  <div className={`text-sm font-bold ${isBuilt ? 'text-stone-200' : 'text-stone-500'}`}>{b.label}</div>
+                  <div className={`text-sm font-bold ${isBuilt ? 'text-stone-200' : locked ? 'text-stone-600' : 'text-stone-500'}`}>{b.label}</div>
                   <div className="text-[10px] text-stone-600">{b.effect}</div>
                 </div>
                 <div className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
-                  isBuilt ? 'text-green-400 bg-green-900/40 border-green-700/40' : 'text-amber-600 bg-amber-900/20 border-amber-800/30'
+                  isBuilt ? 'text-green-400 bg-green-900/40 border-green-700/40' :
+                  locked  ? 'text-stone-600 border-stone-700/30' :
+                            'text-amber-600 bg-amber-900/20 border-amber-800/30'
                 }`}>
-                  {isBuilt ? 'AKTIVNÍ' : 'STAVĚT'}
+                  {isBuilt ? 'AKTIVNÍ' : locked ? `fáze ${b.phase}` : 'STAVĚT'}
                 </div>
               </div>
             );
@@ -802,6 +1016,9 @@ const Modal = () => {
     build_workshop:      '🔧 DÍLNA',
     map:                 '🗺 MAPA OKOLÍ',
     buildings_overview:  '🏗 PŘEHLED STAVEB',
+    characters:          '👥 POSTAVY',
+    nadia_trade:         '🤝 OBCHOD S NADIÍ',
+    tech_tree:           '📈 TECHNOLOGICKÝ STROM',
   };
 
   return (
