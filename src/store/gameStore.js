@@ -136,8 +136,11 @@ export const useGameStore = create((set, get) => ({
     { id: 5, text: 'Postavit sběrač dešťové vody',             done: false },
   ],
 
+  // --- VENTILY ---
+  valves: { heating: false, dynamo: false, workshop: false },
+
   // --- UI ---
-  activeModal: null, activeLeftTab: 'tasks', paused: false, speed: 1,
+  activeModal: null, activeLeftTab: 'radio', paused: false, speed: 1,
 
   // ─── AKCE ──────────────────────────────────────────────────────────────────
 
@@ -145,6 +148,7 @@ export const useGameStore = create((set, get) => ({
   setActiveLeftTab: (t) => set({ activeLeftTab: t }),
   togglePause:      ()  => set(s => ({ paused: !s.paused })),
   toggleFF:         ()  => set(s => ({ speed: s.speed === 1 ? 5 : 1 })),
+  toggleValve:      (v) => set(s => ({ valves: { ...s.valves, [v]: !s.valves[v] } })),
   setTradeOffer:    (o) => set(s => ({ nadia: { ...s.nadia, tradeOffer: { ...s.nadia.tradeOffer, ...o } } })),
   clearNadiaNotification: () => set(s => ({ nadia: { ...s.nadia, notification: false } })),
   toggleTask: (id) => set(s => ({ tasks: s.tasks.map(t => t.id === id ? { ...t, done: !t.done } : t) })),
@@ -404,12 +408,46 @@ export const useGameStore = create((set, get) => ({
     // Přirozený pokles tlaku
     boiler.pressure = Math.max(0, boiler.pressure - 0.018);
 
-    // Integrity poškození
+    // Integrita a poškození
     if (boiler.pressure > 12) boiler.integrity = Math.max(0, (boiler.integrity ?? 100) - 0.2);
     if (boiler.water === 0 && boiler.temp > 200) boiler.integrity = Math.max(0, (boiler.integrity ?? 100) - 0.5);
 
+    // Odběr páry (Ventily) a kondenzace
+    const boilerActive = boiler.temp > 100 && boiler.pressure > 0.5;
+    if (boilerActive) {
+      let pressureDrop = 0;
+      let condensation = 0;
+      let powerGain = 0;
+      let heatGain = 0;
+
+      if (valves.heating) {
+        pressureDrop += 0.04;
+        condensation += 0.035; // 87.5% return
+        heatGain += 0.05;
+      }
+      if (valves.dynamo && s.buildings.dynamo.built) {
+        pressureDrop += 0.06;
+        condensation += 0.04; // 66% return
+        powerGain += 0.08;
+      }
+      if (valves.workshop && s.buildings.workshop.built) {
+        pressureDrop += 0.02;
+        // Workshop vents steam entirely (pneumatic tools)
+      }
+
+      // Check if boiler has enough pressure for the valves
+      if (boiler.pressure >= pressureDrop) {
+        boiler.pressure -= pressureDrop;
+        reservoirWater = Math.min(s.waterBarrels * 100, reservoirWater + condensation);
+        stats.heat = Math.min(100, stats.heat + heatGain);
+        stats.power = Math.min(100, stats.power + powerGain);
+      } else {
+        // Not enough pressure to drive the systems, pressure drops to 0 rapidly
+        boiler.pressure = Math.max(0, boiler.pressure - 0.1);
+      }
+    }
+
     const boilerPressure = boiler.pressure * scaleEff;
-    const boilerActive   = boiler.temp > 100 && boiler.pressure > 0;
 
     // ── DÉŠŤ & RÁDIO ─────────────────────────────────────────────────────────
     if (rain.nextRainIn > 0) {

@@ -57,13 +57,13 @@ const TopBar = () => {
   const { stats, resources, dayNumber, phase, timeOfDay, paused, speed, togglePause, toggleFF, skipPhase, buildings } = useGameStore();
   const { boiler } = buildings;
   return (
-    <div className="flex items-center justify-between bg-stone-950 border-b-2 border-amber-900/50 p-2 text-amber-100 text-sm shadow-md z-10 font-mono flex-shrink-0">
-      <div className="flex space-x-2 items-center bg-stone-900 px-3 py-1 rounded border border-stone-700">
+    <div className="flex items-center justify-between bg-stone-950 border-b-2 border-amber-900/50 p-2 text-amber-100 text-base shadow-md z-10 font-mono flex-shrink-0">
+      <div className="flex space-x-2 items-center bg-stone-900 px-3 py-1.5 rounded border border-stone-700 text-base">
         <span className="font-bold text-amber-500">DEN {dayNumber}</span>
-        <span className="text-stone-400 w-12">{formatTime(timeOfDay)}</span>
+        <span className="text-stone-400 w-14">{formatTime(timeOfDay)}</span>
         {phase === 'day'
-          ? <Sun size={14} className="text-amber-400" />
-          : <Moon size={14} className="text-blue-400" />
+          ? <Sun size={18} className="text-amber-400" />
+          : <Moon size={18} className="text-blue-400" />
         }
         {/* Pauza */}
         <button
@@ -95,11 +95,11 @@ const TopBar = () => {
       </div>
 
       <div className="flex space-x-3">
-        <StatBar label="Zdraví"  icon={<Heart    size={16} className="text-red-500"    />} value={stats.health} color="bg-red-600"    />
-        <StatBar label="Jídlo"   icon={<Utensils size={16} className="text-orange-400" />} value={stats.food}   color="bg-orange-500" />
-        <StatBar label="Teplo"   icon={<Flame    size={16} className="text-amber-500"  />} value={stats.heat}   color="bg-amber-600"  />
-        <StatBar label="Voda"    icon={<Droplets size={16} className="text-blue-400"   />} value={stats.water}  color="bg-blue-500"   />
-        <StatBar label="Energie" icon={<Zap      size={16} className="text-yellow-400" />} value={stats.power}  color="bg-yellow-500" />
+        <StatBar label="Zdraví"  icon={<Heart    size={18} className="text-red-500"    />} value={stats.health} color="bg-red-600"    />
+        <StatBar label="Jídlo"   icon={<Utensils size={18} className="text-orange-400" />} value={stats.food}   color="bg-orange-500" />
+        <StatBar label="Teplo"   icon={<Flame    size={18} className="text-amber-500"  />} value={stats.heat}   color="bg-amber-600"  />
+        <StatBar label="Voda"    icon={<Droplets size={18} className="text-blue-400"   />} value={stats.water}  color="bg-blue-500"   />
+        <StatBar label="Elektřina" icon={<Zap    size={18} className="text-yellow-400" />} value={stats.power}  color="bg-yellow-500" />
       </div>
 
       <div className="flex space-x-5 items-center">
@@ -623,8 +623,8 @@ const PipeOverlay = () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GameCanvas = () => {
-  const { buildings, setActiveModal, phase, stats, waterBarrels, reservoirWater } = useGameStore();
-  const { boiler, dynamo, greenhouse, distillery, collector } = buildings;
+  const { buildings, setActiveModal, phase, stats, waterBarrels, reservoirWater, valves, toggleValve, setActiveLeftTab } = useGameStore();
+  const { boiler, dynamo, greenhouse, distillery, collector, workshop } = buildings;
   const boilerActive = boiler.fuelTimer > 0;
 
   return (
@@ -731,6 +731,46 @@ const GameCanvas = () => {
             icon={<Droplets size={28} className={distillery.built ? (boilerActive ? 'text-cyan-400' : 'text-cyan-800') : 'text-stone-500 group-hover:text-cyan-400'} />}
             onClick={() => setActiveModal('build_distillery')}
           />
+        </div>
+
+        {/* Dílna — vpravo uprostřed */}
+        <div className="absolute" style={{ top: '40%', right: '8%' }}>
+          <BuildNode
+            title="DÍLNA"
+            built={workshop.built}
+            effect={workshop.built ? '🛠 CRAFTING' : 'STAVĚT'}
+            icon={<Wrench size={28} className={workshop.built ? 'text-stone-300' : 'text-stone-500 group-hover:text-stone-300'} />}
+            onClick={() => workshop.built ? setActiveLeftTab('crafting') : setActiveModal('build_workshop')}
+          />
+        </div>
+
+        {/* ROZDĚLOVAČ PÁRY (Ventily) */}
+        <div className="absolute flex gap-3 p-3 bg-stone-900 border-2 border-stone-700 rounded-lg shadow-xl z-20" style={{ top: '22%', left: '50%', transform: 'translateX(-50%)' }}>
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-stone-950 px-2 text-[10px] text-amber-600 font-bold font-mono tracking-widest border border-stone-800 rounded">ROZDĚLOVAČ PÁRY</div>
+          
+          {/* Ventil Topení */}
+          <div className="flex flex-col items-center">
+            <button onClick={() => toggleValve('heating')} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${valves.heating ? 'bg-amber-600 border-amber-400 shadow-[0_0_10px_rgba(217,119,6,0.5)]' : 'bg-stone-800 border-stone-600'}`}>
+              <Flame size={14} className={valves.heating ? 'text-stone-900' : 'text-stone-500'} />
+            </button>
+            <div className={`text-[9px] mt-1 font-mono font-bold ${valves.heating ? 'text-amber-400' : 'text-stone-500'}`}>TOPENÍ</div>
+          </div>
+
+          {/* Ventil Dynamo */}
+          <div className="flex flex-col items-center">
+            <button onClick={() => toggleValve('dynamo')} disabled={!dynamo.built} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-30 ${valves.dynamo ? 'bg-yellow-500 border-yellow-300 shadow-[0_0_10px_rgba(234,179,8,0.5)]' : 'bg-stone-800 border-stone-600'}`}>
+              <Zap size={14} className={valves.dynamo ? 'text-stone-900' : 'text-stone-500'} />
+            </button>
+            <div className={`text-[9px] mt-1 font-mono font-bold ${valves.dynamo ? 'text-yellow-400' : 'text-stone-500'} ${!dynamo.built && 'opacity-30'}`}>DYNAMO</div>
+          </div>
+
+          {/* Ventil Dílna */}
+          <div className="flex flex-col items-center">
+            <button onClick={() => toggleValve('workshop')} disabled={!workshop.built} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-30 ${valves.workshop ? 'bg-blue-400 border-blue-200 shadow-[0_0_10px_rgba(96,165,250,0.5)]' : 'bg-stone-800 border-stone-600'}`}>
+              <Wrench size={14} className={valves.workshop ? 'text-stone-900' : 'text-stone-500'} />
+            </button>
+            <div className={`text-[9px] mt-1 font-mono font-bold ${valves.workshop ? 'text-blue-400' : 'text-stone-500'} ${!workshop.built && 'opacity-30'}`}>DÍLNA</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1127,7 +1167,7 @@ const Modal = () => {
           <div className="bg-stone-950 rounded p-3 border border-stone-800 text-sm">
             <div className="text-stone-400 mb-2">Rizika a dopady:</div>
             <ul className="list-disc pl-5 text-stone-500 mb-3">
-              <li><span className="text-yellow-500">Stojí 35 Energie</span> (Máš: {Math.round(hero.energy)})</li>
+              <li><span className="text-yellow-500">Stojí 35 Únavy/Fyz. Energie</span> (Máš: {Math.round(hero.energy)})</li>
               <li>Přineseš náhodné množství dřeva a štěpek</li>
               <li>Ztratíš 3 hodiny (90 ticků) času</li>
               {phase === 'night' && (weather === 'frost' || weather === 'storm') && (

@@ -56,8 +56,8 @@ export const Boiler = ({ temp, pressure, water, fuelType, fuelTimer, integrity, 
             style={{ background: tempColor, transform: `rotate(${gauge1Angle}deg)` }} />
           <div className="absolute w-1.5 h-1.5 bg-stone-800 rounded-full z-10" />
         </div>
-        <div className="text-[7px] font-mono font-bold" style={{ color: tempColor }}>{Math.round(temp)}°C</div>
-        <div className="text-[6px] text-stone-600 font-mono">TEMP</div>
+        <div className="text-[10px] font-mono font-bold" style={{ color: tempColor }}>{Math.round(temp)}°C</div>
+        <div className="text-[9px] text-stone-600 font-mono">TEMP</div>
       </div>
 
       {/* Budík 2 — Tlak */}
@@ -67,18 +67,18 @@ export const Boiler = ({ temp, pressure, water, fuelType, fuelTimer, integrity, 
             style={{ background: pressColor, transform: `rotate(${gauge2Angle}deg)` }} />
           <div className="absolute w-2 h-2 bg-stone-800 rounded-full z-10" />
         </div>
-        <div className="text-[7px] font-mono font-bold" style={{ color: pressColor }}>{pressure.toFixed(1)} bar</div>
-        <div className="text-[6px] text-stone-600 font-mono">TLAK</div>
+        <div className="text-[10px] font-mono font-bold" style={{ color: pressColor }}>{pressure.toFixed(1)} bar</div>
+        <div className="text-[9px] text-stone-600 font-mono">TLAK</div>
       </div>
 
       {/* Water level — tube na pravé straně */}
       <div className="absolute top-6 right-3 flex flex-col items-center gap-0.5">
-        <div className="text-[6px] text-stone-600 font-mono">VODA</div>
+        <div className="text-[9px] text-stone-600 font-mono">VODA</div>
         <div className="w-4 h-20 bg-stone-950 border border-stone-600 rounded-sm overflow-hidden flex flex-col justify-end" title={`Voda: ${Math.round(water)} L`}>
           <div className="w-full transition-all duration-1000 bg-blue-600"
             style={{ height: `${water}%`, background: water < 15 ? '#dc2626' : '#2563eb' }} />
         </div>
-        <div className={`text-[7px] font-mono font-bold ${water < 15 ? 'text-red-400 animate-pulse' : 'text-blue-400'}`}>
+        <div className={`text-[10px] font-mono font-bold ${water < 15 ? 'text-red-400 animate-pulse' : 'text-blue-400'}`}>
           {Math.round(water)}L
         </div>
       </div>
@@ -86,7 +86,7 @@ export const Boiler = ({ temp, pressure, water, fuelType, fuelTimer, integrity, 
       {/* Label */}
       <div className="text-center mb-2 z-10">
         <div className="text-amber-500 font-bold font-mono text-sm tracking-wider drop-shadow-md">HLAVNÍ KOTEL</div>
-        <div className={`text-[10px] font-mono font-bold mt-0.5 ${
+        <div className={`text-xs font-mono font-bold mt-0.5 ${
           pressure > 8  ? 'text-red-400 animate-pulse' :
           temp > 100    ? 'text-green-500' :
           burning       ? 'text-amber-400' : 'text-stone-500'
@@ -126,7 +126,7 @@ export const Boiler = ({ temp, pressure, water, fuelType, fuelTimer, integrity, 
           }} />
       </div>
       {fuelDef && (
-        <div className="text-[7px] text-stone-600 font-mono mt-0.5">{fuelDef.label} — {fuelTimer} tick</div>
+        <div className="text-[10px] text-stone-600 font-mono mt-0.5">{fuelDef.label} — {fuelTimer} tick</div>
       )}
     </div>
   );
