@@ -1,0 +1,9 @@
+at je moznost postavit vice sberacu vody
+trubky - k vode, voda studena, voda tepla, para
+system trubek - prehrivani, uniky, opravy
+trubky se budou muset taky stavet k jednotlivym mistum a skrz cely dum
+struktura domu
+nejdriv trubky drevene, pak z nejakeho lepsiho materialu
+zakladni nastrojovna na stavbu trubek
+pak vylepsena nastrojovna na stavbu lepsich trubek
+(vse trva - stavba pristroje, trubky, oprava, sbirani vody (progress bar u veci, co trvaj), tekouci voda chvili tece, para trva nez se nekam dostane)

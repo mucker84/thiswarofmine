@@ -6,7 +6,7 @@ import {
   PauseCircle, PlayCircle, AlertTriangle, Package, Waves,
   FastForward, SkipForward, Building2, TrendingUp, ArrowLeftRight
 } from 'lucide-react';
-import { useGameStore, BUILDING_PHASE, TECH_PHASE_LABELS } from './store/gameStore';
+import { useGameStore, BUILDING_PHASE, TECH_PHASE_LABELS, FUEL_TYPES } from './store/gameStore';
 import { useGameLoop } from './hooks/useGameLoop';
 import { PIPE_COORDS, PIPE_SLOTS, MATERIALS, NODE_MIN_PRESSURE, NODE_LABELS, REPAIR_COST, REPLACE_COST, GASKET_CRAFT_COST } from './data/pipeSystem';
 
@@ -53,7 +53,8 @@ const ResourceItem = ({ icon, label, value, low }) => (
 );
 
 const TopBar = () => {
-  const { stats, resources, dayNumber, phase, timeOfDay, paused, speed, togglePause, toggleFF, skipPhase } = useGameStore();
+  const { stats, resources, dayNumber, phase, timeOfDay, paused, speed, togglePause, toggleFF, skipPhase, buildings } = useGameStore();
+  const { boiler } = buildings;
   return (
     <div className="flex items-center justify-between bg-stone-950 border-b-2 border-amber-900/50 p-2 text-amber-100 text-sm shadow-md z-10 font-mono flex-shrink-0">
       <div className="flex space-x-2 items-center bg-stone-900 px-3 py-1 rounded border border-stone-700">
@@ -104,6 +105,7 @@ const TopBar = () => {
         <ResourceItem icon={<Cog  size={15} />} label="Šrot"       value={resources.scrap} />
         <ResourceItem icon={<Box  size={15} />} label="Dřevo"      value={resources.wood}  />
         <ResourceItem icon={<Flame size={15} className="text-orange-600" />} label="Uhlí" value={resources.coal} low={resources.coal < 5} />
+        <ResourceItem icon={<span className="text-[11px]">🌿</span>} label="Štěpky"    value={resources.chips ?? 0} low={(resources.chips ?? 0) < 10} />
         <ResourceItem icon={<Wrench size={15} />} label="Součástky" value={resources.parts} />
         <ResourceItem icon={<span className="text-[11px]">⬡</span>} label="Těsnění"    value={resources.gaskets ?? 0} low={(resources.gaskets ?? 0) < 2} />
         <ResourceItem icon={<span className="text-[11px]">⚗</span>} label="Chemikálie" value={resources.chemicals ?? 0} />
@@ -177,12 +179,13 @@ const CraftingPanel = ({ resources, craftGaskets }) => {
 // ─── LEFT SIDEBAR ────────────────────────────────────────────────────────────
 
 const LeftSidebar = () => {
-  const { activeLeftTab, setActiveLeftTab, tasks, toggleTask, messages, inventory, setActiveModal } = useGameStore();
+  const { activeLeftTab, setActiveLeftTab, tasks, toggleTask, messages, radioMessages, inventory, setActiveModal } = useGameStore();
 
   const TABS = [
     { key: 'tasks',     label: 'Úkoly' },
     { key: 'inventory', label: 'Inv.'  },
     { key: 'log',       label: 'Log'   },
+    { key: 'radio',     label: 'Rádio' },
   ];
 
   // Suroviny jako první řada inventáře
@@ -191,6 +194,7 @@ const LeftSidebar = () => {
     { key: 'scrap',     icon: <Cog    size={16} className="text-stone-400"  />, label: 'Šrot',       value: resources.scrap        },
     { key: 'wood',      icon: <Box    size={16} className="text-amber-700"  />, label: 'Dřevo',      value: resources.wood         },
     { key: 'coal',      icon: <Flame  size={16} className="text-orange-600" />, label: 'Uhlí',       value: resources.coal         },
+    { key: 'chips',     icon: <span className="text-[13px]">🌿</span>,          label: 'Štěpky',     value: resources.chips   ?? 0 },
     { key: 'parts',     icon: <Wrench size={16} className="text-blue-500"   />, label: 'Součástky',  value: resources.parts        },
     { key: 'gaskets',   icon: <span className="text-[13px]">⬡</span>,           label: 'Těsnění',    value: resources.gaskets  ?? 0 },
     { key: 'chemicals', icon: <span className="text-[13px]">⚗</span>,           label: 'Chemikálie', value: resources.chemicals ?? 0 },
@@ -323,6 +327,29 @@ const LeftSidebar = () => {
           </div>
         )}
 
+        {/* RÁDIO */}
+        {activeLeftTab === 'radio' && (
+          <div className="space-y-2">
+            {radioMessages.length === 0 && <p className="text-stone-600 text-xs">Ticho.</p>}
+            {radioMessages.map(msg => (
+              <div
+                key={msg.id}
+                className={`text-xs p-2 rounded border leading-snug font-mono ${
+                  msg.type === 'weather'
+                    ? 'bg-blue-950/40 border-blue-800/60 text-blue-300'
+                    : msg.type === 'signal'
+                    ? 'bg-purple-950/40 border-purple-800/60 text-purple-300'
+                    : 'bg-stone-950/60 border-stone-800/40 text-stone-400'
+                }`}
+              >
+                {msg.type === 'weather' && <span className="text-blue-500">🌧 </span>}
+                {msg.type === 'signal'  && <span className="text-purple-500">📡 </span>}
+                {msg.text}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* CRAFTING */}
         {activeLeftTab === 'crafting' && (
           <CraftingPanel resources={resources} craftGaskets={craftGaskets} />
@@ -335,14 +362,24 @@ const LeftSidebar = () => {
 
 // ─── KOTEL ────────────────────────────────────────────────────────────────────
 
-const Boiler = ({ fuel, heat, onClick }) => {
-  const boilerActive = fuel > 0;
-  // Intenzita plamenů podle paliva (0–1)
-  const intensity = fuel / 100;
-  // Budík 1 ukazuje teplo (0–100 → úhel -120 až +120)
-  const gauge1Angle = -120 + (heat / 100) * 240;
-  // Budík 2 ukazuje palivo
-  const gauge2Angle = -120 + (fuel / 100) * 240;
+const Boiler = ({ temp, pressure, water, fuelType, fuelTimer, integrity, onClick }) => {
+  const burning   = fuelTimer > 0;
+  const fuelDef   = fuelType ? FUEL_TYPES[fuelType] : null;
+  const intensity = fuelDef ? fuelDef.heatPerTick / 18 : 0; // 0-1 normalised
+
+  // Gauge 1 — Teplota (0–350 °C) → -120…+120 °
+  const gauge1Angle = -120 + Math.min(1, temp / 350) * 240;
+  // Gauge 2 — Tlak (0–15 bar) → -120…+120 °
+  const gauge2Angle = -120 + Math.min(1, pressure / 15) * 240;
+
+  const tempColor = temp > 200 ? '#ef4444' : temp > 100 ? '#f59e0b' : '#60a5fa';
+  const pressColor = pressure > 8 ? '#ef4444' : pressure > 5 ? '#f59e0b' : pressure > 2 ? '#4ade80' : '#94a3b8';
+
+  const borderClass = pressure > 8
+    ? 'border-red-600 hover:border-red-400'
+    : burning
+    ? 'border-amber-700 hover:border-amber-500'
+    : 'border-stone-600 hover:border-stone-400';
 
   const flames = [
     { delay: '0s',    baseH: 28, varH: 12 },
@@ -352,96 +389,106 @@ const Boiler = ({ fuel, heat, onClick }) => {
     { delay: '0.15s', baseH: 26, varH: 10 },
   ];
 
+  // Fuel timer bar width
+  const fuelTimerMax = fuelDef ? fuelDef.burnTicks * 4 : 1;
+  const fuelPct      = Math.min(100, (fuelTimer / fuelTimerMax) * 100);
+
   return (
     <div
-      className={`relative w-56 h-80 bg-gradient-to-b from-stone-700 to-stone-900 border-4 ${
-        boilerActive
-          ? fuel < 15 ? 'border-red-700 hover:border-red-500' : 'border-amber-800 hover:border-amber-500'
-          : 'border-stone-600 hover:border-stone-400'
-      } rounded-t-full rounded-b-lg shadow-2xl flex flex-col items-center justify-end pb-6 cursor-pointer transition-colors duration-700 group select-none`}
+      className={`relative w-56 h-80 bg-gradient-to-b from-stone-700 to-stone-900 border-4 ${borderClass} rounded-t-full rounded-b-lg shadow-2xl flex flex-col items-center justify-end pb-4 cursor-pointer transition-colors duration-700 group select-none`}
       onClick={onClick}
     >
       {/* Záře kotle */}
-      {boilerActive && (
-        <div
-          className="absolute inset-0 rounded-t-full rounded-b-lg pointer-events-none transition-opacity duration-1000"
-          style={{
-            boxShadow: `0 0 ${20 + intensity * 40}px ${8 + intensity * 20}px rgba(251,146,60,${0.1 + intensity * 0.2})`,
-          }}
-        />
+      {burning && (
+        <div className="absolute inset-0 rounded-t-full rounded-b-lg pointer-events-none" style={{
+          boxShadow: `0 0 ${20 + intensity * 40}px ${8 + intensity * 20}px rgba(251,146,60,${0.08 + intensity * 0.18})`,
+        }} />
+      )}
+      {pressure > 8 && (
+        <div className="absolute inset-0 rounded-t-full rounded-b-lg pointer-events-none animate-pulse" style={{
+          boxShadow: '0 0 30px 12px rgba(239,68,68,0.25)',
+        }} />
       )}
 
-      {/* Budík 1 — Teplo */}
-      <div className="absolute top-12 left-3 w-10 h-10 bg-stone-200 rounded-full border-4 border-amber-800 flex items-center justify-center shadow-inner" title="Teplo">
-        <div
-          className="absolute w-4 h-0.5 bg-red-600 rounded-full origin-right transition-transform duration-1000"
-          style={{ transform: `rotate(${gauge1Angle}deg)` }}
-        />
-        <div className="absolute w-1.5 h-1.5 bg-stone-800 rounded-full z-10" />
-      </div>
-
-      {/* Budík 2 — Palivo */}
-      <div className="absolute top-28 -left-5 w-12 h-12 bg-stone-200 rounded-full border-4 border-amber-800 flex items-center justify-center shadow-inner" title="Palivo">
-        <div
-          className="absolute w-5 h-0.5 bg-red-600 rounded-full origin-right transition-transform duration-1000"
-          style={{ transform: `rotate(${gauge2Angle}deg)` }}
-        />
-        <div className="absolute w-2 h-2 bg-stone-800 rounded-full z-10" />
-      </div>
-
-      {/* Indikátor paliva (sloupec) */}
-      <div className="absolute top-6 right-4 flex flex-col items-center gap-1">
-        <div className="text-[8px] font-mono text-stone-500 tracking-widest">FUEL</div>
-        <div className="w-3.5 h-16 bg-stone-950 border border-stone-700 rounded-sm overflow-hidden flex flex-col justify-end">
-          <div
-            className={`w-full transition-all duration-1000 ${
-              fuel > 30 ? 'bg-amber-600' : fuel > 10 ? 'bg-orange-600' : 'bg-red-700'
-            }`}
-            style={{ height: `${fuel}%` }}
-          />
+      {/* Budík 1 — Teplota */}
+      <div className="absolute top-10 left-2 flex flex-col items-center gap-0.5">
+        <div className="w-11 h-11 bg-stone-200 rounded-full border-4 border-amber-800 flex items-center justify-center shadow-inner" title={`Teplota: ${Math.round(temp)} °C`}>
+          <div className="absolute w-4 h-0.5 rounded-full origin-right transition-transform duration-500"
+            style={{ background: tempColor, transform: `rotate(${gauge1Angle}deg)` }} />
+          <div className="absolute w-1.5 h-1.5 bg-stone-800 rounded-full z-10" />
         </div>
-        <div className={`text-[8px] font-mono font-bold ${fuel < 15 ? 'text-red-400 animate-pulse' : 'text-stone-500'}`}>
-          {fuel}
+        <div className="text-[7px] font-mono font-bold" style={{ color: tempColor }}>{Math.round(temp)}°C</div>
+        <div className="text-[6px] text-stone-600 font-mono">TEMP</div>
+      </div>
+
+      {/* Budík 2 — Tlak */}
+      <div className="absolute top-24 -left-5 flex flex-col items-center gap-0.5">
+        <div className="w-13 h-13 bg-stone-200 rounded-full border-4 border-amber-800 flex items-center justify-center shadow-inner" style={{ width: '52px', height: '52px' }} title={`Tlak: ${pressure.toFixed(1)} bar`}>
+          <div className="absolute w-5 h-0.5 rounded-full origin-right transition-transform duration-500"
+            style={{ background: pressColor, transform: `rotate(${gauge2Angle}deg)` }} />
+          <div className="absolute w-2 h-2 bg-stone-800 rounded-full z-10" />
+        </div>
+        <div className="text-[7px] font-mono font-bold" style={{ color: pressColor }}>{pressure.toFixed(1)} bar</div>
+        <div className="text-[6px] text-stone-600 font-mono">TLAK</div>
+      </div>
+
+      {/* Water level — tube na pravé straně */}
+      <div className="absolute top-6 right-3 flex flex-col items-center gap-0.5">
+        <div className="text-[6px] text-stone-600 font-mono">VODA</div>
+        <div className="w-4 h-20 bg-stone-950 border border-stone-600 rounded-sm overflow-hidden flex flex-col justify-end" title={`Voda: ${Math.round(water)} L`}>
+          <div className="w-full transition-all duration-1000 bg-blue-600"
+            style={{ height: `${water}%`, background: water < 15 ? '#dc2626' : '#2563eb' }} />
+        </div>
+        <div className={`text-[7px] font-mono font-bold ${water < 15 ? 'text-red-400 animate-pulse' : 'text-blue-400'}`}>
+          {Math.round(water)}L
         </div>
       </div>
 
       {/* Label */}
-      <div className="text-center mb-3 z-10">
+      <div className="text-center mb-2 z-10">
         <div className="text-amber-500 font-bold font-mono text-sm tracking-wider drop-shadow-md">HLAVNÍ KOTEL</div>
         <div className={`text-[10px] font-mono font-bold mt-0.5 ${
-          boilerActive
-            ? fuel < 15 ? 'text-orange-400 animate-pulse' : 'text-green-500'
-            : 'text-red-500 animate-pulse'
+          pressure > 8  ? 'text-red-400 animate-pulse' :
+          temp > 100    ? 'text-green-500' :
+          burning       ? 'text-amber-400' : 'text-stone-500'
         }`}>
-          {boilerActive ? (fuel < 15 ? '⚠ MÁLO PALIVA' : '✓ V PROVOZU') : '✗ ZHASLÝ'}
+          {pressure > 8 ? '⚠ PŘETLAK!' : temp > 100 ? `✓ ${Math.round(pressure * 10) / 10} bar` : burning ? '↑ OHŘEV...' : '✗ STUDENÝ'}
         </div>
       </div>
 
       {/* Dvířka s plameny */}
-      <div className={`w-28 h-20 border-2 border-stone-950 bg-stone-900 rounded-t-lg relative overflow-hidden ${
-        boilerActive ? 'group-hover:border-amber-600' : ''
-      }`}>
-        <div className={`absolute inset-0 transition-colors duration-700 ${boilerActive ? 'bg-orange-600/15' : 'bg-stone-800/10'}`} />
-        {boilerActive && (
+      <div className={`w-28 h-16 border-2 border-stone-950 bg-stone-900 rounded-t-lg relative overflow-hidden ${burning ? 'group-hover:border-amber-600' : ''}`}>
+        <div className={`absolute inset-0 transition-colors duration-700 ${burning ? 'bg-orange-600/15' : 'bg-stone-800/10'}`} />
+        {burning && (
           <div className="absolute bottom-0 w-full flex justify-evenly items-end px-1 pb-1">
             {flames.map((f, i) => (
-              <div
-                key={i}
-                className="rounded-t-full animate-pulse"
-                style={{
-                  width: '10px',
-                  height: `${Math.round((f.baseH + f.varH * intensity) * 0.8)}px`,
-                  animationDelay: f.delay,
-                  animationDuration: `${0.8 + i * 0.15}s`,
-                  background: `linear-gradient(to top, #fde047, #f97316 50%, #dc2626)`,
-                  boxShadow: `0 0 ${6 + intensity * 10}px rgba(251,146,60,0.8)`,
-                  opacity: 0.7 + intensity * 0.3,
-                }}
-              />
+              <div key={i} className="rounded-t-full animate-pulse" style={{
+                width: '10px',
+                height: `${Math.round((f.baseH + f.varH * intensity) * 0.75)}px`,
+                animationDelay: f.delay,
+                animationDuration: `${0.8 + i * 0.15}s`,
+                background: fuelType === 'coal'
+                  ? 'linear-gradient(to top, #fde047, #a78bfa 50%, #6d28d9)'
+                  : 'linear-gradient(to top, #fde047, #f97316 50%, #dc2626)',
+                boxShadow: `0 0 ${5 + intensity * 10}px rgba(251,146,60,0.8)`,
+                opacity: 0.7 + intensity * 0.3,
+              }} />
             ))}
           </div>
         )}
       </div>
+
+      {/* Fuel timer bar */}
+      <div className="w-28 h-1.5 bg-stone-950 rounded-full overflow-hidden mt-1.5">
+        <div className="h-full transition-all duration-500 rounded-full"
+          style={{
+            width: `${fuelPct}%`,
+            background: fuelType === 'coal' ? '#a78bfa' : fuelType === 'wood' ? '#f97316' : '#a3a3a3',
+          }} />
+      </div>
+      {fuelDef && (
+        <div className="text-[7px] text-stone-600 font-mono mt-0.5">{fuelDef.label} — {fuelTimer} tick</div>
+      )}
     </div>
   );
 };
@@ -634,8 +681,12 @@ const GameCanvas = () => {
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="pointer-events-auto">
             <Boiler
-              fuel={boiler.fuel}
-              heat={stats.heat}
+              temp={boiler.temp}
+              pressure={boiler.pressure}
+              water={boiler.water}
+              fuelType={boiler.fuelType}
+              fuelTimer={boiler.fuelTimer}
+              integrity={boiler.integrity}
               onClick={() => setActiveModal('boiler')}
             />
           </div>
@@ -756,6 +807,16 @@ const BottomBar = () => {
         <span className={`text-xs font-mono ${wInfo.color}`} title="Počasí">
           {wInfo.icon} {wInfo.label}
         </span>
+        {/* Boiler metrics */}
+        <span className="text-xs font-mono bg-stone-800/60 px-2 py-0.5 rounded border border-stone-700">
+          <span className={boiler.temp > 200 ? 'text-red-400' : boiler.temp > 100 ? 'text-amber-400' : 'text-blue-400'}>
+            {Math.round(boiler.temp)}°
+          </span>
+          <span className="text-stone-600"> | </span>
+          <span className={boiler.pressure > 8 ? 'text-red-400 font-bold animate-pulse' : boiler.pressure > 5 ? 'text-amber-400' : boiler.pressure > 2 ? 'text-green-400' : 'text-stone-500'}>
+            {boiler.pressure.toFixed(1)} bar
+          </span>
+        </span>
         {/* Tech fáze badge */}
         <button
           onClick={() => setActiveModal('tech_tree')}
@@ -809,7 +870,7 @@ const BUILDING_DEFS = {
   workshop:   { title: 'DÍLNA',             desc: 'Umožní vyrábět pokročilé komponenty a opravovat zařízení. Odemkne craftingové menu.', costs: { scrap: 40, wood: 20, parts: 8 } },
 };
 
-const RESOURCE_LABELS = { scrap: 'Šrot', wood: 'Dřevo', coal: 'Uhlí', parts: 'Součástky', gaskets: 'Těsnění', chemicals: 'Chemikálie' };
+const RESOURCE_LABELS = { scrap: 'Šrot', wood: 'Dřevo', coal: 'Uhlí', parts: 'Součástky', gaskets: 'Těsnění', chemicals: 'Chemikálie', chips: 'Štěpky' };
 
 // Mini stat bar pro postavy
 const MiniBar = ({ value, color, label }) => {
@@ -826,63 +887,134 @@ const MiniBar = ({ value, color, label }) => {
 };
 
 const Modal = () => {
-  const { activeModal, setActiveModal, buildings, stokeCoal, stokeWood, buildBuilding, resources, stats, hero, nadia, setTradeOffer, techPhase, pipes, repairPipe, replacePipe, upgradePipe, craftGaskets, cleanBoiler } = useGameStore();
+  const { activeModal, setActiveModal, buildings, buildBuilding, resources, stats, hero, nadia, setTradeOffer, techPhase, pipes, repairPipe, replacePipe, upgradePipe, craftGaskets, cleanBoiler, addFuel, pumpWater, ventPressure, radioMessages, rain } = useGameStore();
   const [tradeInput, setTradeInput] = useState({ scrap: 0, wood: 0, coal: 0, parts: 0 });
   if (!activeModal) return null;
 
   const renderContent = () => {
     // Kotel
     if (activeModal === 'boiler') {
-      const { fuel, scale = 0 } = buildings.boiler;
+      const { temp, pressure, water, fuelType, fuelTimer, integrity, scale = 0 } = buildings.boiler;
       const scalePct = Math.round(scale);
-      const scaleColor = scalePct < 40 ? 'bg-green-700' : scalePct < 70 ? 'bg-amber-600' : 'bg-red-600';
-      const effectivePressure = Math.round(fuel * (1 - scale * 0.005));
+      const fuelDef = fuelType ? FUEL_TYPES[fuelType] : null;
+
       return (
-        <div className="space-y-4">
+        <div className="space-y-3">
+          {/* Status grid */}
           <div className="grid grid-cols-3 gap-2">
-            <div className="bg-stone-950 rounded p-3 border border-stone-800">
-              <div className="text-[10px] text-stone-500 font-mono mb-1">PALIVO</div>
-              <div className={`text-xl font-bold font-mono ${fuel < 15 ? 'text-red-400' : 'text-amber-400'}`}>{fuel}<span className="text-xs text-stone-500"> / 100</span></div>
-              <div className="w-full h-1.5 bg-stone-900 rounded mt-1.5 overflow-hidden">
-                <div className={`h-full transition-all ${fuel > 30 ? 'bg-amber-600' : fuel > 10 ? 'bg-orange-600' : 'bg-red-700'}`} style={{ width: `${fuel}%` }} />
+            <div className="bg-stone-950 rounded p-2.5 border border-stone-800 text-center">
+              <div className="text-[9px] text-stone-500 font-mono mb-0.5">TEPLOTA</div>
+              <div className={`text-lg font-bold font-mono ${temp > 200 ? 'text-red-400' : temp > 100 ? 'text-amber-400' : 'text-blue-400'}`}>
+                {Math.round(temp)}°C
+              </div>
+              <div className="text-[8px] text-stone-600 mt-0.5">
+                {temp < 100 ? '❄ Studený' : temp < 180 ? '✓ Ideální' : '⚠ Přehřátý'}
               </div>
             </div>
-            <div className="bg-stone-950 rounded p-3 border border-stone-800">
-              <div className="text-[10px] text-stone-500 font-mono mb-1">TEPLO</div>
-              <div className="text-xl font-bold font-mono text-amber-400">{Math.round(stats.heat)}<span className="text-xs text-stone-500">%</span></div>
+            <div className="bg-stone-950 rounded p-2.5 border border-stone-800 text-center">
+              <div className="text-[9px] text-stone-500 font-mono mb-0.5">TLAK</div>
+              <div className={`text-lg font-bold font-mono ${pressure > 8 ? 'text-red-400 animate-pulse' : pressure > 5 ? 'text-amber-400' : pressure > 2 ? 'text-green-400' : 'text-stone-500'}`}>
+                {pressure.toFixed(1)} bar
+              </div>
+              <div className="text-[8px] text-stone-600 mt-0.5">
+                {pressure < 2 ? '▼ Slabý' : pressure < 5 ? '✓ Ideální' : pressure < 8 ? '⚠ Vysoký' : '🔴 DANGER'}
+              </div>
             </div>
-            <div className="bg-stone-950 rounded p-3 border border-stone-800">
-              <div className="text-[10px] text-stone-500 font-mono mb-1">TLAK</div>
-              <div className={`text-xl font-bold font-mono ${effectivePressure < 40 ? 'text-red-400' : 'text-cyan-400'}`}>{effectivePressure}<span className="text-xs text-stone-500"> bar</span></div>
+            <div className="bg-stone-950 rounded p-2.5 border border-stone-800 text-center">
+              <div className="text-[9px] text-stone-500 font-mono mb-0.5">VODA</div>
+              <div className={`text-lg font-bold font-mono ${water < 15 ? 'text-red-400 animate-pulse' : 'text-blue-400'}`}>
+                {Math.round(water)}L
+              </div>
+              <div className="text-[8px] text-stone-600 mt-0.5">
+                {water === 0 ? '❌ KRITICKÉ!' : water < 30 ? '⚠ Nízko' : '✓ OK'}
+              </div>
             </div>
           </div>
 
-          {/* Zanášení */}
-          <div className="bg-stone-950 rounded p-3 border border-stone-800">
-            <div className="flex justify-between items-center mb-1.5">
-              <div className="text-[10px] text-stone-500 font-mono tracking-wider">ZANÁŠENÍ KOTLE</div>
-              <div className={`text-xs font-bold font-mono ${scalePct < 40 ? 'text-green-400' : scalePct < 70 ? 'text-amber-400' : 'text-red-400 animate-pulse'}`}>
-                {scalePct} %
-              </div>
+          {/* Fuel management */}
+          <div>
+            <div className="text-[10px] text-stone-600 uppercase tracking-wider mb-2">Přiložit palivo</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {['chips', 'wood', 'coal'].map(t => {
+                const def = FUEL_TYPES[t];
+                const canAfford = Object.entries(def.cost).every(([k, v]) => (resources[k] ?? 0) >= v);
+                return (
+                  <button
+                    key={t}
+                    onClick={() => { addFuel(t); setActiveModal(null); }}
+                    disabled={!canAfford}
+                    className="py-2 px-2 bg-amber-900/30 border border-amber-700/60 text-amber-200 text-[10px] font-mono rounded hover:bg-amber-900/60 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <div className="font-bold">{def.label}</div>
+                    <div className="text-[8px] text-stone-600">
+                      {Object.entries(def.cost).map(([k, v]) => `${v}×${k[0]}`).join(' ')}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-            <div className="w-full h-2.5 bg-stone-900 rounded overflow-hidden border border-stone-800 mb-2">
-              <div className={`h-full transition-all ${scaleColor}`} style={{ width: `${scalePct}%` }} />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="text-[9px] text-stone-600">
-                {scalePct < 40 ? 'Čistý — výkon 100 %' : scalePct < 70 ? 'Mírné zanášení — výkon snížen' : 'Vážné zanášení — tlak kritický!'}
+            {fuelDef && (
+              <div className="text-[9px] text-stone-500 mt-1.5 bg-stone-950/60 p-1.5 rounded border border-stone-800/50">
+                Topí se: <span className="text-amber-300 font-bold">{fuelDef.label}</span> ({fuelTimer} tick zbývá)
               </div>
+            )}
+          </div>
+
+          {/* Water management */}
+          <div>
+            <div className="text-[10px] text-stone-600 uppercase tracking-wider mb-2">Voda & ventil</div>
+            <div className="grid grid-cols-2 gap-1.5">
               <button
-                onClick={() => { cleanBoiler(); }}
-                disabled={(resources.chemicals ?? 0) < 1}
-                className="px-3 py-1 bg-teal-900/40 border border-teal-700/60 text-teal-300 text-[10px] font-mono rounded hover:bg-teal-900/70 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={() => pumpWater()}
+                disabled={resources.reservoirWater < 2 || water >= 100}
+                className="py-2 px-2 bg-blue-900/30 border border-blue-700/60 text-blue-300 text-[10px] font-mono rounded hover:bg-blue-900/60 transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                ⚗ Vyčistit (1× chemikálie)
+                💧 Přečerpat<br/>
+                <span className="text-[8px]">{Math.round(resources.reservoirWater || 0)} L v sudu</span>
+              </button>
+              <button
+                onClick={() => ventPressure()}
+                disabled={pressure < 0.5}
+                className="py-2 px-2 bg-red-900/30 border border-red-700/60 text-red-300 text-[10px] font-mono rounded hover:bg-red-900/60 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                💨 Vypustit<br/>
+                <span className="text-[8px]">-2.5 bar bezpečnost</span>
               </button>
             </div>
           </div>
 
-          <p className="text-stone-400 text-xs">Kotel spotřebovává 1 palivo každých 30 min. Zanášení snižuje tlak páry — chemikálie ho resetují.</p>
+          {/* Scaling */}
+          <div className="bg-stone-950 rounded p-2 border border-stone-800">
+            <div className="flex justify-between items-center mb-1">
+              <div className="text-[9px] text-stone-500 font-mono">ZANÁŠENÍ</div>
+              <div className={`text-xs font-bold font-mono ${scalePct < 40 ? 'text-green-400' : scalePct < 70 ? 'text-amber-400' : 'text-red-400 animate-pulse'}`}>
+                {scalePct}%
+              </div>
+            </div>
+            <div className="w-full h-2 bg-stone-900 rounded overflow-hidden border border-stone-800 mb-1.5">
+              <div className={`h-full transition-all ${scalePct < 40 ? 'bg-green-700' : scalePct < 70 ? 'bg-amber-600' : 'bg-red-600'}`} style={{ width: `${scalePct}%` }} />
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[8px] text-stone-600">
+                {scalePct < 40 ? 'Čistý — 100 % výkon' : scalePct < 70 ? 'Tlak snížen' : 'VÁŽNÉ'}
+              </span>
+              <button
+                onClick={() => { cleanBoiler(); setActiveModal(null); }}
+                disabled={(resources.chemicals ?? 0) < 1}
+                className="px-2 py-0.5 bg-teal-900/40 border border-teal-700/50 text-teal-300 text-[8px] font-mono rounded hover:bg-teal-900/60 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Vyčistit (1× chem)
+              </button>
+            </div>
+          </div>
+
+          {/* Info */}
+          <div className="text-[8px] text-stone-600 bg-stone-950/40 p-1.5 rounded border border-stone-800/50">
+            • Ideální: 120–180 °C, 2–5 bar
+            • Voda se odpaří při &gt;100 °C
+            • Tlak &gt;8 bar = nebezpečí
+            • Zanášení snižuje výkon
+          </div>
           <div className="space-y-2">
             {/* Přiložit uhlí */}
             <div className="flex items-center justify-between bg-stone-950 p-3 rounded border border-stone-800">

@@ -17,8 +17,8 @@ export const PIPE_COORDS = {
 export const MATERIALS = {
   wood: {
     label: 'Dřevěné',
-    maxPressure: 30,
-    resistance: 7,
+    maxPressure: 5,      // bar
+    resistance: 0.7,     // bar/segment
     degradation: 0.07,
     color: '#78350f',
     activeColor: '#92400e',
@@ -27,8 +27,8 @@ export const MATERIALS = {
   },
   copper: {
     label: 'Měděné',
-    maxPressure: 80,
-    resistance: 3,
+    maxPressure: 10,
+    resistance: 0.3,
     degradation: 0.04,
     color: '#b45309',
     activeColor: '#d97706',
@@ -37,8 +37,8 @@ export const MATERIALS = {
   },
   steel: {
     label: 'Ocelové',
-    maxPressure: 150,
-    resistance: 1.5,
+    maxPressure: 15,
+    resistance: 0.15,
     degradation: 0.02,
     color: '#4b5563',
     activeColor: '#6b7280',
@@ -47,12 +47,12 @@ export const MATERIALS = {
   },
 };
 
-// Minimální tlak potřebný aby uzel fungoval
+// Minimální tlak (bar) potřebný aby uzel fungoval
 export const NODE_MIN_PRESSURE = {
-  collector:  15,
-  dynamo:     40,
-  greenhouse: 20,
-  distillery: 30,
+  collector:  1.5,
+  dynamo:     4.0,
+  greenhouse: 2.0,
+  distillery: 3.0,
 };
 
 export const NODE_LABELS = {
