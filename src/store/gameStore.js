@@ -91,23 +91,26 @@ export const useGameStore = create((set, get) => ({
            tradeOffer: { scrap: 0, wood: 0, coal: 0, parts: 0 },
            pendingReturn: null, notification: false },
 
-  // --- STAVY ---
-  stats: { health: 82, food: 70, heat: 15, water: 65, power: 40 },
+  // --- INTRO ---
+  introStep: 0,   // 0 = intro běží, -1 = přeskočeno/hotovo
 
-  // --- SUROVINY ---
-  resources: { scrap: 80, wood: 25, coal: 8, parts: 5, gaskets: 4, chemicals: 0, chips: 40 },
+  // --- STAVY ---
+  stats: { health: 82, food: 55, heat: 5, water: 60, power: 20 },
+
+  // --- SUROVINY --- (napjaté startovní zásoby)
+  resources: { scrap: 20, wood: 8, coal: 0, parts: 2, gaskets: 2, chemicals: 0, chips: 15 },
 
   // --- ZÁSOBNÍK VODY (sudy) ---
-  reservoirWater: 40,
+  reservoirWater: 12,
   waterBarrels: 1,
 
   // --- BUDOVY ---
   buildings: {
     boiler: {
       built: true, level: 1,
-      temp: 18,        // °C
+      temp: 12,        // °C — studený kotel
       pressure: 0,     // bar (0-15)
-      water: 55,       // litrů interní zásoby (0-100)
+      water: 20,       // litrů — málo vody
       integrity: 100,
       fuelType: null,
       fuelTimer: 0,
@@ -118,6 +121,7 @@ export const useGameStore = create((set, get) => ({
     distillery: { built: false, level: 0 },
     greenhouse: { built: false, level: 0 },
     workshop:   { built: false, level: 0 },
+    defense_vent: { built: false, level: 0 },
   },
 
   // --- TRUBKY ---
@@ -129,20 +133,23 @@ export const useGameStore = create((set, get) => ({
 
   // --- ÚKOLY ---
   tasks: [
-    { id: 1, text: 'Přiložit do kotle (dřevo nebo štěpky)',    done: false },
-    { id: 2, text: 'Dočkat se teploty nad 100 °C',             done: false },
-    { id: 3, text: 'Udržet tlak v ideální zóně 2–5 bar',       done: false },
-    { id: 4, text: 'Přečerpat vodu ze sudu do kotle',          done: false },
+    { id: 1, text: 'Přečerpat vodu ze sudu do kotle',          done: false },
+    { id: 2, text: 'Přiložit do kotle (dřevo nebo štěpky)',    done: false },
+    { id: 3, text: 'Dočkat se teploty nad 100 °C',             done: false },
+    { id: 4, text: 'Udržet tlak v ideální zóně 2–5 bar',       done: false },
     { id: 5, text: 'Postavit sběrač dešťové vody',             done: false },
   ],
 
   // --- VENTILY ---
-  valves: { heating: false, dynamo: false, workshop: false },
+  valves: { heating: false, dynamo: false, workshop: false, defense_vent: false },
 
   // --- UI ---
   activeModal: null, activeLeftTab: 'radio', paused: false, speed: 1,
 
   // ─── AKCE ──────────────────────────────────────────────────────────────────
+
+  advanceIntro: () => set(s => ({ introStep: s.introStep + 1 })),
+  skipIntro:    () => set({ introStep: -1, paused: false }),
 
   setActiveModal:   (m) => set({ activeModal: m }),
   setActiveLeftTab: (t) => set({ activeLeftTab: t }),
@@ -245,12 +252,14 @@ export const useGameStore = create((set, get) => ({
   }),
 
   buildBuilding: (name) => set(s => {
+    const newWoodPipe = () => ({ material: 'wood', integrity: 100, maxIntegrityCap: 100, isLeaking: false, pressure: 0 });
     const costs = {
       collector:  { scrap: 15 },
       dynamo:     { scrap: 50, parts: 10 },
       distillery: { scrap: 30, parts: 8, wood: 10 },
       greenhouse: { wood: 30, scrap: 15 },
       workshop:   { scrap: 40, wood: 20, parts: 8 },
+      defense_vent: { scrap: 25, parts: 5, wood: 10 },
     };
     const cost = costs[name];
     if (!cost || s.techPhase < (BUILDING_PHASE[name] ?? 1)) return s;
@@ -377,6 +386,7 @@ export const useGameStore = create((set, get) => ({
     let nightLootGiven  = s.nightLootGiven;
     let reservoirWater  = s.reservoirWater;
     let rain            = { ...s.rain };
+    let stats           = { ...s.stats };
 
     // ── KOTEL — termostatika ─────────────────────────────────────────────────
     const boiler  = { ...s.buildings.boiler };
@@ -433,6 +443,19 @@ export const useGameStore = create((set, get) => ({
       if (valves.workshop && s.buildings.workshop.built) {
         pressureDrop += 0.02;
         // Workshop vents steam entirely (pneumatic tools)
+      }
+      if (valves.defense_vent && s.buildings.defense_vent.built) {
+        pressureDrop += 0.20; // Odfuk žere obří tlak
+        // Pára se zcela ztratí
+        // Poškození trubky
+        const defPipe = pipes['boiler_defense_vent'];
+        if (defPipe) {
+          defPipe.integrity = Math.max(0, defPipe.integrity - 0.4);
+          if (defPipe.integrity === 0) {
+            valves.defense_vent = false;
+            defPipe.isLeaking = true;
+          }
+        }
       }
 
       // Check if boiler has enough pressure for the valves
@@ -603,7 +626,6 @@ export const useGameStore = create((set, get) => ({
     }
 
     // ── STATS ───────────────────────────────────────────────────────────────
-    const stats = { ...s.stats };
     const { dynamo, collector, distillery, greenhouse } = s.buildings;
 
     // Teplo místnosti ← kotelní tlak

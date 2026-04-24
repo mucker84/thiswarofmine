@@ -4,7 +4,7 @@ import {
   Hammer, Wrench, Box, Cog, Map, User,
   Wind, CheckSquare, Square, Moon, Sun,
   PauseCircle, PlayCircle, AlertTriangle, Package, Waves,
-  FastForward, SkipForward, Building2, TrendingUp, ArrowLeftRight
+  FastForward, SkipForward, Building2, TrendingUp, ArrowLeftRight, CloudRain
 } from 'lucide-react';
 import { useGameStore, BUILDING_PHASE, TECH_PHASE_LABELS, FUEL_TYPES } from './store/gameStore';
 import { useGameLoop } from './hooks/useGameLoop';
@@ -214,16 +214,16 @@ const LeftSidebar = () => {
           <span className="text-[10px] text-stone-500 group-hover:text-amber-300 uppercase tracking-wider">Stavby</span>
         </button>
         <button
-          onClick={() => setActiveLeftTab('crafting')}
+          onClick={() => setActiveLeftTab(activeLeftTab === 'crafting' ? 'radio' : 'crafting')}
           className={`flex-1 py-2 rounded border transition flex items-center justify-center gap-2 group ${
             activeLeftTab === 'crafting'
               ? 'bg-amber-900/30 border-amber-700 text-amber-400'
               : 'bg-stone-800 border-stone-700 hover:border-amber-700 hover:bg-amber-900/20'
           }`}
-          title="Crafting"
+          title="Crafting (Klikni znovu pro návrat)"
         >
           <Wrench size={18} className={activeLeftTab === 'crafting' ? 'text-amber-400' : 'text-stone-400 group-hover:text-amber-400'} />
-          <span className="text-[10px] text-stone-500 group-hover:text-amber-300 uppercase tracking-wider">Craft</span>
+          <span className="text-[10px] text-stone-500 group-hover:text-amber-300 uppercase tracking-wider">{activeLeftTab === 'crafting' ? 'Zavřít' : 'Craft'}</span>
         </button>
       </div>
 
@@ -536,8 +536,8 @@ const PipeOverlay = () => {
   return (
     <svg
       viewBox="0 0 160 90"
-      className="absolute inset-0 w-full h-full"
-      style={{ zIndex: 6 }}
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      style={{ zIndex: 5 }}
     >
       <defs>
         <filter id="glow">
@@ -569,6 +569,7 @@ const PipeOverlay = () => {
         return (
           <g
             key={pipeId}
+            className="pointer-events-auto"
             style={{ cursor: 'pointer' }}
             onClick={() => setActiveModal(`pipe_${pipeId}`)}
           >
@@ -656,12 +657,13 @@ const GameCanvas = () => {
       <div className="relative w-full max-w-4xl" style={{ aspectRatio: '16/9' }}>
         <PipeOverlay />
         {/* Nápisy místností */}
-        <div className="absolute top-8 left-10 text-stone-700 font-mono text-lg tracking-widest font-bold">SKLADIŠTĚ</div>
-        <div className="absolute top-8 right-10 text-stone-700 font-mono text-lg tracking-widest font-bold">OBYTNÁ ČÁST</div>
-        <div className="absolute bottom-8 right-10 text-stone-700 font-mono text-sm tracking-widest font-bold">DÍLNA</div>
+        <div className="absolute top-8 left-10 text-stone-700 font-mono text-lg tracking-widest font-bold z-0">SKLADIŠTĚ</div>
+        <div className="absolute top-8 right-10 text-stone-700 font-mono text-lg tracking-widest font-bold z-0">OBYTNÁ ČÁST</div>
+        <div className="absolute bottom-8 right-10 text-stone-700 font-mono text-sm tracking-widest font-bold z-0">DÍLNA</div>
+        <div className="absolute bottom-8 left-10 text-stone-700 font-mono text-sm tracking-widest font-bold z-0">PŘÍSTUP</div>
 
         {/* Kotel — střed */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <div className="pointer-events-auto">
             <Boiler
               temp={boiler.temp}
@@ -675,19 +677,30 @@ const GameCanvas = () => {
           </div>
         </div>
 
-        {/* Dynamo — vlevo dole */}
-        <div className="absolute" style={{ bottom: '10%', left: '8%' }}>
+        {/* Kompresor — vlevo dole */}
+        <div className="absolute z-10" style={{ bottom: '10%', left: '8%' }}>
           <BuildNode
-            title="DYNAMO"
+            title="KOMPRESOR"
             built={dynamo.built}
-            effect="⚡ +ENERGIE"
-            icon={<Zap size={28} className={dynamo.built ? 'text-yellow-400' : 'text-stone-500 group-hover:text-yellow-400'} />}
+            effect="💨 +PNEUMATIKA"
+            icon={<Wind size={28} className={dynamo.built ? 'text-yellow-400' : 'text-stone-500 group-hover:text-yellow-400'} />}
             onClick={() => setActiveModal('build_dynamo')}
           />
         </div>
 
+        {/* Parní Odfuk — u dveří vlevo */}
+        <div className="absolute z-10" style={{ top: '40%', left: '8%' }}>
+          <BuildNode
+            title="PARNÍ ODFUK"
+            built={buildings.defense_vent?.built}
+            effect="♨️ OBRANA"
+            icon={<CloudRain size={28} className={buildings.defense_vent?.built ? 'text-red-400' : 'text-stone-500 group-hover:text-red-400'} />}
+            onClick={() => setActiveModal('build_defense_vent')}
+          />
+        </div>
+
         {/* Pěstírna — vpravo dole */}
-        <div className="absolute" style={{ bottom: '10%', right: '8%' }}>
+        <div className="absolute z-10" style={{ bottom: '10%', right: '8%' }}>
           <BuildNode
             title="PĚSTÍRNA"
             built={greenhouse.built}
@@ -698,7 +711,7 @@ const GameCanvas = () => {
         </div>
 
         {/* Sběrač kondenzátu — vlevo nahoře */}
-        <div className="absolute" style={{ top: '12%', left: '8%' }}>
+        <div className="absolute z-10" style={{ top: '12%', left: '8%' }}>
           <BuildNode
             title="SBĚRAČ"
             built={collector.built}
@@ -710,19 +723,19 @@ const GameCanvas = () => {
         </div>
 
         {/* Sudy na vodu — nahoře uprostřed */}
-        <div className="absolute flex gap-1" style={{ top: '15%', left: '35%' }}>
+        <div className="absolute flex gap-1 z-10" style={{ top: '15%', left: '35%' }}>
           {[...Array(waterBarrels)].map((_, i) => {
             const fill = Math.min(100, Math.max(0, reservoirWater - i * 100));
             return (
-              <div key={i} className="w-10 h-14 bg-stone-800 border-2 border-stone-700 rounded flex flex-col justify-end overflow-hidden cursor-pointer shadow-lg" onClick={() => setActiveModal('build_barrel')} title={`Sud ${i+1}: ${Math.round(fill)}/100 L`}>
+              <div key={i} className="w-10 h-14 bg-stone-800 border-2 border-stone-700 rounded flex flex-col justify-end overflow-hidden cursor-pointer shadow-lg hover:border-amber-500" onClick={() => setActiveModal('build_barrel')} title={`Sud ${i+1}: ${Math.round(fill)}/100 L`}>
                 <div className="w-full bg-blue-500/80 transition-all duration-1000" style={{ height: `${fill}%` }} />
               </div>
             );
           })}
         </div>
 
-        {/* Destilérka — vpravo nahoře (upgrade vody) */}
-        <div className="absolute" style={{ top: '12%', right: '8%' }}>
+        {/* Destilérka — vpravo nahoře */}
+        <div className="absolute z-10" style={{ top: '12%', right: '8%' }}>
           <BuildNode
             title="DESTILÉRKA"
             built={distillery.built}
@@ -734,7 +747,7 @@ const GameCanvas = () => {
         </div>
 
         {/* Dílna — vpravo uprostřed */}
-        <div className="absolute" style={{ top: '40%', right: '8%' }}>
+        <div className="absolute z-10" style={{ top: '40%', right: '8%' }}>
           <BuildNode
             title="DÍLNA"
             built={workshop.built}
@@ -744,33 +757,47 @@ const GameCanvas = () => {
           />
         </div>
 
-        {/* ROZDĚLOVAČ PÁRY (Ventily) */}
-        <div className="absolute flex gap-3 p-3 bg-stone-900 border-2 border-stone-700 rounded-lg shadow-xl z-20" style={{ top: '22%', left: '50%', transform: 'translateX(-50%)' }}>
-          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-stone-950 px-2 text-[10px] text-amber-600 font-bold font-mono tracking-widest border border-stone-800 rounded">ROZDĚLOVAČ PÁRY</div>
+        {/* ROZDĚLOVAČ PÁRY (Ventily) a propojovací trubka ke kotli */}
+        <div className="absolute flex flex-col items-center z-20 pointer-events-none" style={{ top: '2%', left: '50%', transform: 'translateX(-50%)' }}>
           
-          {/* Ventil Topení */}
-          <div className="flex flex-col items-center">
-            <button onClick={() => toggleValve('heating')} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${valves.heating ? 'bg-amber-600 border-amber-400 shadow-[0_0_10px_rgba(217,119,6,0.5)]' : 'bg-stone-800 border-stone-600'}`}>
-              <Flame size={14} className={valves.heating ? 'text-stone-900' : 'text-stone-500'} />
-            </button>
-            <div className={`text-[9px] mt-1 font-mono font-bold ${valves.heating ? 'text-amber-400' : 'text-stone-500'}`}>TOPENÍ</div>
-          </div>
+          <div className="flex gap-3 p-3 bg-stone-900 border-2 border-stone-700 rounded-lg shadow-xl relative pointer-events-auto">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-stone-950 px-2 text-[10px] text-amber-600 font-bold font-mono tracking-widest border border-stone-800 rounded whitespace-nowrap">ROZDĚLOVAČ PÁRY</div>
+            
+            {/* Ventil Topení */}
+            <div className="flex flex-col items-center">
+              <button onClick={() => toggleValve('heating')} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${valves.heating ? 'bg-amber-600 border-amber-400 shadow-[0_0_10px_rgba(217,119,6,0.5)]' : 'bg-stone-800 border-stone-600'}`}>
+                <Flame size={14} className={valves.heating ? 'text-stone-900' : 'text-stone-500'} />
+              </button>
+              <div className={`text-[9px] mt-1 font-mono font-bold ${valves.heating ? 'text-amber-400' : 'text-stone-500'}`}>TOPENÍ</div>
+            </div>
 
-          {/* Ventil Dynamo */}
-          <div className="flex flex-col items-center">
-            <button onClick={() => toggleValve('dynamo')} disabled={!dynamo.built} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-30 ${valves.dynamo ? 'bg-yellow-500 border-yellow-300 shadow-[0_0_10px_rgba(234,179,8,0.5)]' : 'bg-stone-800 border-stone-600'}`}>
-              <Zap size={14} className={valves.dynamo ? 'text-stone-900' : 'text-stone-500'} />
-            </button>
-            <div className={`text-[9px] mt-1 font-mono font-bold ${valves.dynamo ? 'text-yellow-400' : 'text-stone-500'} ${!dynamo.built && 'opacity-30'}`}>DYNAMO</div>
-          </div>
+            {/* Ventil Kompresor */}
+            <div className="flex flex-col items-center">
+              <button onClick={() => toggleValve('dynamo')} disabled={!dynamo.built} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-30 ${valves.dynamo ? 'bg-yellow-500 border-yellow-300 shadow-[0_0_10px_rgba(234,179,8,0.5)]' : 'bg-stone-800 border-stone-600'}`}>
+                <Wind size={14} className={valves.dynamo ? 'text-stone-900' : 'text-stone-500'} />
+              </button>
+              <div className={`text-[9px] mt-1 font-mono font-bold ${valves.dynamo ? 'text-yellow-400' : 'text-stone-500'} ${!dynamo.built && 'opacity-30'}`}>KOMPRESOR</div>
+            </div>
 
-          {/* Ventil Dílna */}
-          <div className="flex flex-col items-center">
-            <button onClick={() => toggleValve('workshop')} disabled={!workshop.built} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-30 ${valves.workshop ? 'bg-blue-400 border-blue-200 shadow-[0_0_10px_rgba(96,165,250,0.5)]' : 'bg-stone-800 border-stone-600'}`}>
-              <Wrench size={14} className={valves.workshop ? 'text-stone-900' : 'text-stone-500'} />
-            </button>
-            <div className={`text-[9px] mt-1 font-mono font-bold ${valves.workshop ? 'text-blue-400' : 'text-stone-500'} ${!workshop.built && 'opacity-30'}`}>DÍLNA</div>
+            {/* Ventil Dílna */}
+            <div className="flex flex-col items-center">
+              <button onClick={() => toggleValve('workshop')} disabled={!workshop.built} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-30 ${valves.workshop ? 'bg-blue-400 border-blue-200 shadow-[0_0_10px_rgba(96,165,250,0.5)]' : 'bg-stone-800 border-stone-600'}`}>
+                <Wrench size={14} className={valves.workshop ? 'text-stone-900' : 'text-stone-500'} />
+              </button>
+              <div className={`text-[9px] mt-1 font-mono font-bold ${valves.workshop ? 'text-blue-400' : 'text-stone-500'} ${!workshop.built && 'opacity-30'}`}>DÍLNA</div>
+            </div>
+
+            {/* Ventil Odfuk (Zbraň) */}
+            <div className="flex flex-col items-center">
+              <button onClick={() => toggleValve('defense_vent')} disabled={!buildings.defense_vent?.built} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-30 ${valves.defense_vent ? 'bg-red-500 border-red-300 shadow-[0_0_15px_rgba(239,68,68,0.6)] animate-pulse' : 'bg-stone-800 border-stone-600'}`}>
+                <CloudRain size={14} className={valves.defense_vent ? 'text-stone-900' : 'text-stone-500'} />
+              </button>
+              <div className={`text-[9px] mt-1 font-mono font-bold ${valves.defense_vent ? 'text-red-400' : 'text-stone-500'} ${!buildings.defense_vent?.built && 'opacity-30'}`}>ODFUK</div>
+            </div>
           </div>
+          
+          {/* Silná trubka dolů do kotle */}
+          <div className="w-6 h-[8vh] bg-gradient-to-r from-stone-800 via-stone-600 to-stone-800 border-l-2 border-r-2 border-stone-900 shadow-inner" />
         </div>
       </div>
     </div>
@@ -889,7 +916,7 @@ const BottomBar = () => {
       </div>
 
       <div className="flex space-x-2 pr-2">
-        <ActionButton icon={<Hammer size={18} />} label="Crafting" />
+        <ActionButton icon={<Hammer size={18} />} label="Crafting" onClick={() => setActiveLeftTab(activeLeftTab === 'crafting' ? 'radio' : 'crafting')} />
         <ActionButton icon={<Map    size={18} />} label="Mapa" onClick={() => setActiveModal('map')} />
         <CharactersButton /></div>
     </div>
@@ -900,10 +927,11 @@ const BottomBar = () => {
 
 const BUILDING_DEFS = {
   collector:  { title: 'SBĚRAČ KONDENZÁTU', desc: 'Zachytává páru z kotle a kondenzuje ji na pitnou vodu. Funguje jen když kotel topí. Levný první krok k soběstačnosti.', costs: { scrap: 15 } },
-  dynamo:     { title: 'DYNAMO',            desc: 'Spaluje přebytečné palivo a vyrábí elektřinu. Zastaví pokles energie a pomalu ji dobíjí.', costs: { scrap: 50, parts: 10 } },
+  dynamo:     { title: 'KOMPRESOR',         desc: 'Pohání pneumatické nástroje a pasti z přebytečného tlaku. Zastaví pokles kinetické energie domu a pomalu ji dobíjí.', costs: { scrap: 50, parts: 10 } },
   distillery: { title: 'DESTILÉRKA',        desc: 'Pokročilá destilace — výrazně více vody než sběrač. Vyžaduje funkční kotel. Staví se po sběrači jako upgrade.', costs: { scrap: 30, parts: 8, wood: 10 } },
   greenhouse: { title: 'PĚSTÍRNA',          desc: 'Hydroponická zahrada. Snižuje spotřebu jídla na polovinu — nezávislost na nočním scavengingu.', costs: { wood: 30, scrap: 15 } },
   workshop:   { title: 'DÍLNA',             desc: 'Umožní vyrábět pokročilé komponenty a opravovat zařízení. Odemkne craftingové menu.', costs: { scrap: 40, wood: 20, parts: 8 } },
+  defense_vent: { title: 'PARNÍ ODFUK',     desc: 'Obranný mechanismus, který vypustí oblak vařící páry z okna. Extrémní spotřeba tlaku a vody, navíc rychle ničí přívodní trubku.', costs: { scrap: 25, parts: 5, wood: 10 } },
 };
 
 const RESOURCE_LABELS = { scrap: 'Šrot', wood: 'Dřevo', coal: 'Uhlí', parts: 'Součástky', gaskets: 'Těsnění', chemicals: 'Chemikálie', chips: 'Štěpky' };
@@ -1557,10 +1585,107 @@ const Modal = () => {
   );
 };
 
+// ─── INTRO SCREEN ────────────────────────────────────────────────────────────
+
+const INTRO_SLIDES = [
+  {
+    title: 'Den první. Továrna na okraji města.',
+    body: 'Venku je −12 °C. Elektřina nefunguje od minulého týdne.\nKotel stojí uprostřed haly — studený, prázdný, tichý.\nBez tepla přežiješ tuto noc jen stěží.',
+    hint: null,
+    icon: '🌨',
+  },
+  {
+    title: 'V rohu jsou dva barely.',
+    body: 'Trochu vody. Trochu dřeva.\nDost na to, aby kotel začal hřát — ale ne na dlouho.\nMusíš jednat rychle a pak najít způsob, jak zásoby doplňovat.',
+    hint: '→ Přečerpej vodu ze sudu do kotle',
+    icon: '🪣',
+  },
+  {
+    title: 'Kotel je stará věc. Vybuchne, když ho nebudeš hlídat.',
+    body: 'Sleduj teplotu a tlak. Ideál je 120–180 °C, 2–5 bar.\nNad 8 bar = nebezpečí. Bez vody = poškození.\nVypouštěcí ventil je tvůj přítel.',
+    hint: '→ Přiložit palivo → kotel → Přiložit',
+    icon: '⚙',
+  },
+  {
+    title: 'Nadia přijde za dva dny.',
+    body: 'Kulhá, ale nosí zásoby ze města.\nDo té doby jsi na to sám.\nZajisti teplo, než dojde dřevo.',
+    hint: null,
+    icon: '👤',
+  },
+];
+
+const IntroScreen = () => {
+  const { introStep, advanceIntro, skipIntro } = useGameStore();
+  if (introStep < 0) return null;
+
+  const slide = INTRO_SLIDES[introStep];
+  const isLast = introStep >= INTRO_SLIDES.length - 1;
+
+  return (
+    <div className="absolute inset-0 z-[100] bg-black flex items-center justify-center font-mono">
+      {/* Jemné zrnění */}
+      <div className="absolute inset-0 opacity-[0.03]"
+        style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundSize: '200px' }}
+      />
+
+      <div className="relative max-w-lg w-full mx-8">
+        {/* Krok indikátor */}
+        <div className="flex gap-1.5 mb-8 justify-center">
+          {INTRO_SLIDES.map((_, i) => (
+            <div key={i} className={`h-0.5 w-8 rounded-full transition-all duration-500 ${i <= introStep ? 'bg-amber-600' : 'bg-stone-800'}`} />
+          ))}
+        </div>
+
+        {/* Ikona */}
+        <div className="text-5xl text-center mb-6 opacity-60">{slide.icon}</div>
+
+        {/* Titulek */}
+        <h2 className="text-amber-500 text-lg font-bold tracking-wider mb-4 text-center">
+          {slide.title}
+        </h2>
+
+        {/* Text */}
+        <p className="text-stone-400 text-sm leading-relaxed text-center whitespace-pre-line mb-6">
+          {slide.body}
+        </p>
+
+        {/* Hint */}
+        {slide.hint && (
+          <div className="bg-stone-900 border border-amber-900/50 rounded px-4 py-2 text-amber-700 text-xs text-center mb-6 tracking-wide">
+            {slide.hint}
+          </div>
+        )}
+
+        {/* Tlačítka */}
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={skipIntro}
+            className="px-4 py-2 text-stone-600 hover:text-stone-400 text-xs transition border border-stone-800 hover:border-stone-700 rounded"
+          >
+            Přeskočit
+          </button>
+          <button
+            onClick={isLast ? skipIntro : advanceIntro}
+            className="px-8 py-2 bg-amber-900/50 border border-amber-700 text-amber-300 text-sm font-bold hover:bg-amber-900/80 rounded transition"
+          >
+            {isLast ? 'Začít hrát →' : 'Dál →'}
+          </button>
+        </div>
+
+        {/* Číslo slajdu */}
+        <div className="text-center mt-6 text-stone-700 text-xs">
+          {introStep + 1} / {INTRO_SLIDES.length}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── ROOT ────────────────────────────────────────────────────────────────────
 
 export default function App() {
   useGameLoop();
+  const introStep = useGameStore(s => s.introStep);
   return (
     <div className="w-full h-screen bg-black flex flex-col overflow-hidden selection:bg-amber-900 selection:text-white">
       <TopBar />
@@ -1568,6 +1693,7 @@ export default function App() {
         <LeftSidebar />
         <GameCanvas />
         <Modal />
+        {introStep >= 0 && <IntroScreen />}
       </div>
       <BottomBar />
     </div>
