@@ -79,7 +79,7 @@ export const useGameStore = create((set, get) => ({
   nightLootGiven: false, techPhase: 1, weather: 'clear',
 
   // --- DÉŠŤ & RÁDIO ---
-  rain: { isRaining: false, timeRemaining: 0, nextRainIn: 350, announced: false },
+  rain: { isRaining: false, timeRemaining: 0, nextRainIn: 80, announced: false },
   radioMessages: [
     { id: 1, text: 'Tady Lelek... Dobrý večer. Teploty klesají, mějte kotel v chodu.', type: 'weather' },
     { id: 2, text: '— Milá zásilka ztroskotala na cestě. Marně čekáme. —', type: 'signal' },
@@ -95,13 +95,13 @@ export const useGameStore = create((set, get) => ({
   introStep: 0,   // 0 = intro běží, -1 = přeskočeno/hotovo
 
   // --- STAVY ---
-  stats: { health: 82, food: 55, heat: 5, water: 60, power: 20 },
+  stats: { health: 82, food: 65, heat: 15, water: 65, power: 30 },
 
-  // --- SUROVINY --- (napjaté startovní zásoby)
-  resources: { scrap: 20, wood: 8, coal: 0, parts: 2, gaskets: 2, chemicals: 0, chips: 15 },
+  // --- SUROVINY --- (testovací zásoby — dost na stavbu všeho)
+  resources: { scrap: 200, wood: 80, coal: 20, parts: 20, gaskets: 10, chemicals: 5, chips: 60 },
 
   // --- ZÁSOBNÍK VODY (sudy) ---
-  reservoirWater: 12,
+  reservoirWater: 40,
   waterBarrels: 1,
 
   // --- BUDOVY ---
@@ -116,12 +116,12 @@ export const useGameStore = create((set, get) => ({
       fuelTimer: 0,
       scale: 0,
     },
-    collector:  { built: false, level: 0 },
-    dynamo:     { built: false, level: 0 },
-    distillery: { built: false, level: 0 },
-    greenhouse: { built: false, level: 0 },
-    workshop:   { built: false, level: 0 },
-    defense_vent: { built: false, level: 0 },
+    collector:  { built: false, level: 1 },
+    dynamo:     { built: false, level: 1 },
+    distillery: { built: false, level: 1 },
+    greenhouse: { built: false, level: 1 },
+    workshop:   { built: false, level: 1 },
+    defense_vent: { built: false, level: 1 },
   },
 
   // --- TRUBKY ---
@@ -141,7 +141,16 @@ export const useGameStore = create((set, get) => ({
   ],
 
   // --- VENTILY ---
-  valves: { heating: false, dynamo: false, workshop: false, defense_vent: false },
+  valves: { heating: true, dynamo: false, workshop: false, defense_vent: false },
+
+  // --- PLOVOUCÍ PANELY ---
+  floatingPanels: {
+    distributor: { open: false, x: 200, y: 80 },
+  },
+
+  // --- ROZDĚLOVAČ (live data z gameTick) ---
+  distributorPressure: 0,
+  branchDrop: {},
 
   // --- UI ---
   activeModal: null, activeLeftTab: 'radio', paused: false, speed: 1,
@@ -150,6 +159,19 @@ export const useGameStore = create((set, get) => ({
 
   advanceIntro: () => set(s => ({ introStep: s.introStep + 1 })),
   skipIntro:    () => set({ introStep: -1, paused: false }),
+
+  toggleFloatingPanel: (id) => set(s => ({
+    floatingPanels: {
+      ...s.floatingPanels,
+      [id]: { ...s.floatingPanels[id], open: !s.floatingPanels[id]?.open },
+    },
+  })),
+  moveFloatingPanel: (id, x, y) => set(s => ({
+    floatingPanels: {
+      ...s.floatingPanels,
+      [id]: { ...s.floatingPanels[id], x, y },
+    },
+  })),
 
   setActiveModal:   (m) => set({ activeModal: m }),
   setActiveLeftTab: (t) => set({ activeLeftTab: t }),
@@ -262,7 +284,7 @@ export const useGameStore = create((set, get) => ({
       defense_vent: { scrap: 25, parts: 5, wood: 10 },
     };
     const cost = costs[name];
-    if (!cost || s.techPhase < (BUILDING_PHASE[name] ?? 1)) return s;
+    if (!cost) return s;
     const res = { ...s.resources };
     for (const [item, amount] of Object.entries(cost)) {
       if ((res[item] ?? 0) < amount) return s;
@@ -387,6 +409,8 @@ export const useGameStore = create((set, get) => ({
     let reservoirWater  = s.reservoirWater;
     let rain            = { ...s.rain };
     let stats           = { ...s.stats };
+    const newPipes      = { ...s.pipes };
+    let valves          = { ...s.valves };
 
     // ── KOTEL — termostatika ─────────────────────────────────────────────────
     const boiler  = { ...s.buildings.boiler };
@@ -422,81 +446,99 @@ export const useGameStore = create((set, get) => ({
     if (boiler.pressure > 12) boiler.integrity = Math.max(0, (boiler.integrity ?? 100) - 0.2);
     if (boiler.water === 0 && boiler.temp > 200) boiler.integrity = Math.max(0, (boiler.integrity ?? 100) - 0.5);
 
-    // Odběr páry (Ventily) a kondenzace
+    // ── ROZDĚLOVAČ PÁRY — odběr per větev ───────────────────────────────────
     const boilerActive = boiler.temp > 100 && boiler.pressure > 0.5;
-    if (boilerActive) {
-      let pressureDrop = 0;
-      let condensation = 0;
-      let powerGain = 0;
-      let heatGain = 0;
 
-      if (valves.heating) {
-        pressureDrop += 0.04;
-        condensation += 0.035; // 87.5% return
-        heatGain += 0.05;
+    // Definice větví: [id, tlakOdběr/tick, kondenzace, efekt]
+    const BRANCHES = [
+      { id: 'heating',      cost: 0.04, cond: 0.035, label: 'Topení',    alwaysBuilt: true  },
+      { id: 'dynamo',       cost: 0.06, cond: 0.040, label: 'Dynamo',    alwaysBuilt: false },
+      { id: 'collector',    cost: 0.02, cond: 0.060, label: 'Sběrač',    alwaysBuilt: false },
+      { id: 'distillery',   cost: 0.05, cond: 0.080, label: 'Destilérka',alwaysBuilt: false },
+      { id: 'greenhouse',   cost: 0.03, cond: 0.020, label: 'Pěstírna',  alwaysBuilt: false },
+      { id: 'workshop',     cost: 0.02, cond: 0.000, label: 'Dílna',     alwaysBuilt: false },
+      { id: 'defense_vent', cost: 0.20, cond: 0.000, label: 'Odfuk',     alwaysBuilt: false },
+    ];
+
+    // Spočítej celkový odběr otevřených ventilů
+    let totalDrop   = 0;
+    const branchDrop = {};
+    for (const br of BRANCHES) {
+      const isBuilt = br.alwaysBuilt || s.buildings[br.id]?.built;
+      const isOpen  = valves[br.id];
+      if (boilerActive && isOpen && isBuilt) {
+        branchDrop[br.id] = br.cost;
+        totalDrop += br.cost;
+      } else {
+        branchDrop[br.id] = 0;
       }
-      if (valves.dynamo && s.buildings.dynamo.built) {
-        pressureDrop += 0.06;
-        condensation += 0.04; // 66% return
-        powerGain += 0.08;
+    }
+
+    // Distributor pressure = co dorazí do rozdělovače (po odporu od kotle)
+    const distributorPressure = boilerActive ? Math.max(0, boiler.pressure - 0.3) : 0;
+
+    if (boilerActive && totalDrop > 0) {
+      if (boiler.pressure >= totalDrop) {
+        boiler.pressure -= totalDrop;
+      } else {
+        boiler.pressure = Math.max(0, boiler.pressure * 0.85);
       }
-      if (valves.workshop && s.buildings.workshop.built) {
-        pressureDrop += 0.02;
-        // Workshop vents steam entirely (pneumatic tools)
-      }
-      if (valves.defense_vent && s.buildings.defense_vent.built) {
-        pressureDrop += 0.20; // Odfuk žere obří tlak
-        // Pára se zcela ztratí
-        // Poškození trubky
-        const defPipe = pipes['boiler_defense_vent'];
+      // Efekty aktivních větví
+      if (branchDrop.heating   > 0) { stats.heat  = Math.min(100, stats.heat  + 0.06); }
+      if (branchDrop.dynamo    > 0 && s.buildings.dynamo.built)    { stats.power = Math.min(100, stats.power + 0.08); }
+      if (branchDrop.collector > 0 && s.buildings.collector.built) { stats.water = Math.min(100, stats.water + 0.03); }
+      if (branchDrop.distillery> 0 && s.buildings.distillery.built){ stats.water = Math.min(100, stats.water + 0.05); }
+      if (branchDrop.greenhouse> 0 && s.buildings.greenhouse.built){ stats.food  = Math.min(100, stats.food  + 0.02); }
+
+      // Kondenzace → sudy
+      let condensation = 0;
+      for (const br of BRANCHES) condensation += (branchDrop[br.id] ?? 0) > 0 ? br.cond : 0;
+      reservoirWater = Math.min(s.waterBarrels * 100, reservoirWater + condensation);
+
+      // Odfuk — poškozuje trubku
+      if (branchDrop.defense_vent > 0) {
+        const defPipe = newPipes['boiler_defense_vent'];
         if (defPipe) {
           defPipe.integrity = Math.max(0, defPipe.integrity - 0.4);
-          if (defPipe.integrity === 0) {
-            valves.defense_vent = false;
-            defPipe.isLeaking = true;
-          }
+          if (defPipe.integrity === 0) valves.defense_vent = false;
         }
-      }
-
-      // Check if boiler has enough pressure for the valves
-      if (boiler.pressure >= pressureDrop) {
-        boiler.pressure -= pressureDrop;
-        reservoirWater = Math.min(s.waterBarrels * 100, reservoirWater + condensation);
-        stats.heat = Math.min(100, stats.heat + heatGain);
-        stats.power = Math.min(100, stats.power + powerGain);
-      } else {
-        // Not enough pressure to drive the systems, pressure drops to 0 rapidly
-        boiler.pressure = Math.max(0, boiler.pressure - 0.1);
       }
     }
 
     const boilerPressure = boiler.pressure * scaleEff;
 
     // ── DÉŠŤ & RÁDIO ─────────────────────────────────────────────────────────
-    if (rain.nextRainIn > 0) {
-      rain = { ...rain, nextRainIn: rain.nextRainIn - 1 };
-      if (rain.nextRainIn === 180 && !rain.announced) {
-        rain = { ...rain, announced: true };
-        radioMessages.unshift({ id: Date.now() + 30, text: 'Tady Lelek... obloha se zatahuje. Za 3 minuty déšť. Připravte nádoby!', type: 'weather' });
+    const maxReservoir = s.waterBarrels * 100;
+
+    if (!rain.isRaining) {
+      const next = rain.nextRainIn - 1;
+      if (next === 180 && !rain.announced) {
+        rain = { ...rain, nextRainIn: next, announced: true };
+        radioMessages.unshift({ id: Date.now() + 30, text: 'Tady Lelek... obloha se zatahuje. Za chvíli déšť. Připravte nádoby!', type: 'weather' });
+      } else if (next <= 0) {
+        rain = { isRaining: true, timeRemaining: 80 + Math.floor(Math.random() * 120), nextRainIn: 0, announced: false };
+        radioMessages.unshift({ id: Date.now() + 31, text: 'Déšť začal! Sudy se plní.', type: 'weather' });
+      } else {
+        rain = { ...rain, nextRainIn: next };
       }
-    } else if (rain.nextRainIn === 0 && !rain.isRaining) {
-      rain = { ...rain, isRaining: true, timeRemaining: 60 + Math.floor(Math.random() * 120), nextRainIn: -1 };
-      radioMessages.unshift({ id: Date.now() + 31, text: 'Déšť začal. Sudy se plní.', type: 'weather' });
+    } else {
+      // Plnění sudů během deště
+      const colBuilt = s.buildings.collector?.built;
+      const colLvl   = s.buildings.collector?.level || 0;
+      const rate     = colBuilt ? 0.4 + colLvl * 0.2 : 0.2;
+      reservoirWater = Math.min(maxReservoir, reservoirWater + rate);
+
+      const remaining = rain.timeRemaining - 1;
+      if (remaining <= 0) {
+        rain = { isRaining: false, timeRemaining: 0, nextRainIn: 600 + Math.floor(Math.random() * 800), announced: false };
+        radioMessages.unshift({ id: Date.now() + 32, text: 'Déšť přestal. Hlídejte zásobu v sudech.', type: 'info' });
+      } else {
+        rain = { ...rain, timeRemaining: remaining };
+      }
     }
 
-    if (rain.isRaining) {
-      const colLvl = s.buildings.collector?.level || 0;
-      const rate = colLvl > 0 ? 0.3 + (colLvl * 0.2) : 0.15;
-      reservoirWater = Math.min(s.waterBarrels * 100, reservoirWater + rate);
-      rain = { ...rain, timeRemaining: rain.timeRemaining - 1 };
-      if (rain.timeRemaining <= 0) {
-        rain = { ...rain, isRaining: false, announced: false, nextRainIn: 1200 + Math.floor(Math.random() * 1200) };
-        radioMessages.unshift({ id: Date.now() + 32, text: 'Déšť přestal. Dobré zásoby — hlídejte hladinu sudu.', type: 'info' });
-      }
-    }
-
-    // Noční kondenzát (základní, bez kolektoru)
-    if (phaseJustChanged && phase === 'night') reservoirWater = Math.min(s.waterBarrels * 100, reservoirWater + 4);
+    // Noční kondenzát — malý bonus i bez deště
+    if (phaseJustChanged && phase === 'night') reservoirWater = Math.min(maxReservoir, reservoirWater + 5);
 
     // Atmosférické rádiové zprávy (jednou denně)
     if (tick % DAY_TICKS === Math.floor(DAY_TICKS / 2)) {
@@ -505,7 +547,6 @@ export const useGameStore = create((set, get) => ({
     }
 
     // ── TRUBKY ──────────────────────────────────────────────────────────────
-    const newPipes       = { ...s.pipes };
     const pipeEfficiency = {};
 
     for (const [pipeId, pipe] of Object.entries(newPipes)) {
@@ -683,6 +724,7 @@ export const useGameStore = create((set, get) => ({
       stats, hero, nadia, resources, inventory, reservoirWater, pipes: newPipes,
       messages: messages.slice(0, 12),
       buildings: { ...s.buildings, boiler },
+      distributorPressure, branchDrop, valves,
     };
   }),
 }));

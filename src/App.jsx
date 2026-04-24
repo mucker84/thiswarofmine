@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   Settings, Heart, Utensils, Flame, Droplets, Zap,
   Hammer, Wrench, Box, Cog, Map, User,
@@ -624,7 +624,7 @@ const PipeOverlay = () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GameCanvas = () => {
-  const { buildings, setActiveModal, phase, stats, waterBarrels, reservoirWater, valves, toggleValve, setActiveLeftTab } = useGameStore();
+  const { buildings, setActiveModal, phase, stats, waterBarrels, reservoirWater, valves, toggleValve, setActiveLeftTab, floatingPanels, toggleFloatingPanel } = useGameStore();
   const { boiler, dynamo, greenhouse, distillery, collector, workshop } = buildings;
   const boilerActive = boiler.fuelTimer > 0;
 
@@ -757,47 +757,26 @@ const GameCanvas = () => {
           />
         </div>
 
-        {/* ROZDĚLOVAČ PÁRY (Ventily) a propojovací trubka ke kotli */}
-        <div className="absolute flex flex-col items-center z-20 pointer-events-none" style={{ top: '2%', left: '50%', transform: 'translateX(-50%)' }}>
-          
-          <div className="flex gap-3 p-3 bg-stone-900 border-2 border-stone-700 rounded-lg shadow-xl relative pointer-events-auto">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-stone-950 px-2 text-[10px] text-amber-600 font-bold font-mono tracking-widest border border-stone-800 rounded whitespace-nowrap">ROZDĚLOVAČ PÁRY</div>
-            
-            {/* Ventil Topení */}
-            <div className="flex flex-col items-center">
-              <button onClick={() => toggleValve('heating')} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${valves.heating ? 'bg-amber-600 border-amber-400 shadow-[0_0_10px_rgba(217,119,6,0.5)]' : 'bg-stone-800 border-stone-600'}`}>
-                <Flame size={14} className={valves.heating ? 'text-stone-900' : 'text-stone-500'} />
-              </button>
-              <div className={`text-[9px] mt-1 font-mono font-bold ${valves.heating ? 'text-amber-400' : 'text-stone-500'}`}>TOPENÍ</div>
+        {/* ROZDĚLOVAČ PÁRY — tlačítko pro otevření plovoucího panelu */}
+        <div className="absolute z-20" style={{ top: '4%', left: '50%', transform: 'translateX(-50%)' }}>
+          <button
+            onClick={() => toggleFloatingPanel('distributor')}
+            className={`flex flex-col items-center gap-1 px-4 py-2 rounded-lg border-2 font-mono transition shadow-lg ${
+              floatingPanels.distributor?.open
+                ? 'bg-amber-900/40 border-amber-600 text-amber-300'
+                : 'bg-stone-900/90 border-stone-600 text-stone-400 hover:border-amber-700 hover:text-amber-400'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <ArrowLeftRight size={14} />
+              <span className="text-[10px] font-bold tracking-widest">ROZDĚLOVAČ PÁRY</span>
             </div>
-
-            {/* Ventil Kompresor */}
-            <div className="flex flex-col items-center">
-              <button onClick={() => toggleValve('dynamo')} disabled={!dynamo.built} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-30 ${valves.dynamo ? 'bg-yellow-500 border-yellow-300 shadow-[0_0_10px_rgba(234,179,8,0.5)]' : 'bg-stone-800 border-stone-600'}`}>
-                <Wind size={14} className={valves.dynamo ? 'text-stone-900' : 'text-stone-500'} />
-              </button>
-              <div className={`text-[9px] mt-1 font-mono font-bold ${valves.dynamo ? 'text-yellow-400' : 'text-stone-500'} ${!dynamo.built && 'opacity-30'}`}>KOMPRESOR</div>
+            <div className="flex gap-1">
+              {['heating','dynamo','collector','distillery','greenhouse','workshop'].map(v => (
+                <div key={v} className={`w-1.5 h-1.5 rounded-full ${valves[v] ? 'bg-amber-400' : 'bg-stone-700'}`} />
+              ))}
             </div>
-
-            {/* Ventil Dílna */}
-            <div className="flex flex-col items-center">
-              <button onClick={() => toggleValve('workshop')} disabled={!workshop.built} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-30 ${valves.workshop ? 'bg-blue-400 border-blue-200 shadow-[0_0_10px_rgba(96,165,250,0.5)]' : 'bg-stone-800 border-stone-600'}`}>
-                <Wrench size={14} className={valves.workshop ? 'text-stone-900' : 'text-stone-500'} />
-              </button>
-              <div className={`text-[9px] mt-1 font-mono font-bold ${valves.workshop ? 'text-blue-400' : 'text-stone-500'} ${!workshop.built && 'opacity-30'}`}>DÍLNA</div>
-            </div>
-
-            {/* Ventil Odfuk (Zbraň) */}
-            <div className="flex flex-col items-center">
-              <button onClick={() => toggleValve('defense_vent')} disabled={!buildings.defense_vent?.built} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-30 ${valves.defense_vent ? 'bg-red-500 border-red-300 shadow-[0_0_15px_rgba(239,68,68,0.6)] animate-pulse' : 'bg-stone-800 border-stone-600'}`}>
-                <CloudRain size={14} className={valves.defense_vent ? 'text-stone-900' : 'text-stone-500'} />
-              </button>
-              <div className={`text-[9px] mt-1 font-mono font-bold ${valves.defense_vent ? 'text-red-400' : 'text-stone-500'} ${!buildings.defense_vent?.built && 'opacity-30'}`}>ODFUK</div>
-            </div>
-          </div>
-          
-          {/* Silná trubka dolů do kotle */}
-          <div className="w-6 h-[8vh] bg-gradient-to-r from-stone-800 via-stone-600 to-stone-800 border-l-2 border-r-2 border-stone-900 shadow-inner" />
+          </button>
         </div>
       </div>
     </div>
@@ -1585,6 +1564,204 @@ const Modal = () => {
   );
 };
 
+// ─── FLOATING PANEL BASE (drag) ──────────────────────────────────────────────
+
+const FloatingPanel = ({ id, title, children, defaultX = 200, defaultY = 80 }) => {
+  const { floatingPanels, toggleFloatingPanel, moveFloatingPanel } = useGameStore();
+  const panel = floatingPanels[id];
+  if (!panel?.open) return null;
+
+  const x = panel.x ?? defaultX;
+  const y = panel.y ?? defaultY;
+
+  const dragging = useRef(false);
+  const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
+
+  const onMouseDown = useCallback((e) => {
+    if (e.button !== 0) return;
+    dragging.current = true;
+    dragStart.current = { mx: e.clientX, my: e.clientY, px: x, py: y };
+    e.preventDefault();
+    const onMove = (ev) => {
+      if (!dragging.current) return;
+      const nx = dragStart.current.px + ev.clientX - dragStart.current.mx;
+      const ny = dragStart.current.py + ev.clientY - dragStart.current.my;
+      moveFloatingPanel(id, Math.max(0, nx), Math.max(0, ny));
+    };
+    const onUp = () => { dragging.current = false; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [x, y, id, moveFloatingPanel]);
+
+  return (
+    <div
+      className="absolute z-40 select-none"
+      style={{ left: x, top: y, minWidth: 280 }}
+    >
+      <div className="bg-stone-900 border-2 border-amber-800/60 rounded-lg shadow-2xl overflow-hidden">
+        {/* Hlavička — drag handle */}
+        <div
+          className="flex items-center justify-between px-3 py-2 bg-stone-950 border-b border-stone-700 cursor-grab active:cursor-grabbing"
+          onMouseDown={onMouseDown}
+        >
+          <span className="text-[10px] font-bold font-mono text-amber-500 tracking-widest">{title}</span>
+          <button
+            onClick={() => toggleFloatingPanel(id)}
+            className="text-stone-600 hover:text-red-400 transition text-sm leading-none ml-3"
+            onMouseDown={e => e.stopPropagation()}
+          >✕</button>
+        </div>
+        {/* Obsah */}
+        <div className="p-3">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── DISTRIBUTOR PANEL ────────────────────────────────────────────────────────
+
+const DistributorPanel = () => {
+  const { buildings, valves, toggleValve, distributorPressure, branchDrop, buildings: b } = useGameStore();
+  const boilerP = buildings.boiler.pressure;
+
+  const BRANCH_DEFS = [
+    { id: 'heating',      label: 'Topení',     icon: '🔥', cost: 0.04, effect: '+teplo',      color: 'amber',  alwaysBuilt: true  },
+    { id: 'collector',    label: 'Sběrač',      icon: '💧', cost: 0.02, effect: '+voda (kond)',color: 'blue',   alwaysBuilt: false },
+    { id: 'distillery',   label: 'Destilérka',  icon: '⚗',  cost: 0.05, effect: '+voda++',     color: 'cyan',   alwaysBuilt: false },
+    { id: 'dynamo',       label: 'Dynamo',      icon: '⚡', cost: 0.06, effect: '+energie',    color: 'yellow', alwaysBuilt: false },
+    { id: 'greenhouse',   label: 'Pěstírna',    icon: '🌱', cost: 0.03, effect: '+jídlo',      color: 'green',  alwaysBuilt: false },
+    { id: 'workshop',     label: 'Dílna',       icon: '🔧', cost: 0.02, effect: 'pneumatika',  color: 'stone',  alwaysBuilt: false },
+    { id: 'defense_vent', label: 'Odfuk',       icon: '💨', cost: 0.20, effect: 'obrana!',     color: 'red',    alwaysBuilt: false },
+  ];
+
+  const colorMap = {
+    amber:  { on: 'bg-amber-600 border-amber-400',  off: 'bg-stone-800 border-stone-600', dot: 'bg-amber-400',  text: 'text-amber-400'  },
+    blue:   { on: 'bg-blue-600 border-blue-400',    off: 'bg-stone-800 border-stone-600', dot: 'bg-blue-400',   text: 'text-blue-400'   },
+    cyan:   { on: 'bg-cyan-600 border-cyan-400',    off: 'bg-stone-800 border-stone-600', dot: 'bg-cyan-400',   text: 'text-cyan-400'   },
+    yellow: { on: 'bg-yellow-500 border-yellow-300',off: 'bg-stone-800 border-stone-600', dot: 'bg-yellow-400', text: 'text-yellow-400' },
+    green:  { on: 'bg-green-600 border-green-400',  off: 'bg-stone-800 border-stone-600', dot: 'bg-green-400',  text: 'text-green-400'  },
+    stone:  { on: 'bg-stone-500 border-stone-300',  off: 'bg-stone-800 border-stone-600', dot: 'bg-stone-400',  text: 'text-stone-400'  },
+    red:    { on: 'bg-red-600 border-red-400 animate-pulse', off: 'bg-stone-800 border-stone-600', dot: 'bg-red-500', text: 'text-red-400' },
+  };
+
+  const totalDrop = BRANCH_DEFS.reduce((s, br) => {
+    const isBuilt = br.alwaysBuilt || b[br.id]?.built;
+    return s + (valves[br.id] && isBuilt ? br.cost : 0);
+  }, 0);
+
+  const pressureAfter = Math.max(0, boilerP - totalDrop);
+  const pressureBarPct = Math.min(100, (boilerP / 15) * 100);
+  const distPressurePct = Math.min(100, (distributorPressure / 15) * 100);
+
+  return (
+    <FloatingPanel id="distributor" title="⚙ ROZDĚLOVAČ PÁRY">
+      {/* Tlak příchozí / odchozí */}
+      <div className="mb-3 bg-stone-950 rounded p-2 border border-stone-800">
+        <div className="flex justify-between text-[9px] font-mono text-stone-500 mb-1">
+          <span>TLAK KOTLE</span>
+          <span className={boilerP > 8 ? 'text-red-400 font-bold' : boilerP > 2 ? 'text-amber-400' : 'text-stone-600'}>
+            {boilerP.toFixed(2)} bar
+          </span>
+        </div>
+        <div className="w-full h-2 bg-stone-900 rounded overflow-hidden mb-2">
+          <div
+            className={`h-full transition-all duration-500 ${boilerP > 8 ? 'bg-red-600' : boilerP > 4 ? 'bg-amber-500' : boilerP > 1 ? 'bg-green-500' : 'bg-stone-700'}`}
+            style={{ width: `${pressureBarPct}%` }}
+          />
+        </div>
+
+        <div className="flex justify-between text-[9px] font-mono text-stone-500 mb-1">
+          <span>V ROZDĚLOVAČI</span>
+          <span className="text-amber-600">{distributorPressure.toFixed(2)} bar</span>
+        </div>
+        <div className="w-full h-1.5 bg-stone-900 rounded overflow-hidden mb-2">
+          <div className="h-full bg-amber-700 transition-all duration-500" style={{ width: `${distPressurePct}%` }} />
+        </div>
+
+        <div className="flex justify-between text-[9px] font-mono">
+          <span className="text-stone-600">Celkový odběr:</span>
+          <span className={totalDrop > boilerP ? 'text-red-400' : 'text-stone-400'}>−{totalDrop.toFixed(2)} bar/tick</span>
+        </div>
+        <div className="flex justify-between text-[9px] font-mono mt-0.5">
+          <span className="text-stone-600">Po odběru:</span>
+          <span className={pressureAfter < 0.5 ? 'text-red-400' : 'text-green-400'}>{pressureAfter.toFixed(2)} bar</span>
+        </div>
+      </div>
+
+      {/* Ventily */}
+      <div className="space-y-1.5">
+        {BRANCH_DEFS.map(br => {
+          const isBuilt = br.alwaysBuilt || b[br.id]?.built;
+          const isOpen  = valves[br.id] && isBuilt;
+          const c       = colorMap[br.color];
+          const active  = branchDrop?.[br.id] > 0;
+
+          return (
+            <div
+              key={br.id}
+              className={`flex items-center gap-2 p-2 rounded border transition ${
+                !isBuilt ? 'opacity-30 border-stone-800 bg-stone-950' :
+                isOpen   ? 'border-stone-700 bg-stone-800/50' :
+                           'border-stone-800 bg-stone-950'
+              }`}
+            >
+              {/* Ventil toggle */}
+              <button
+                onClick={() => isBuilt && toggleValve(br.id)}
+                disabled={!isBuilt}
+                className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${isOpen ? c.on : c.off}`}
+                title={isBuilt ? (isOpen ? 'Zavřít ventil' : 'Otevřít ventil') : 'Budova není postavena'}
+              >
+                <span className="text-[11px]">{br.icon}</span>
+              </button>
+
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-[10px] font-bold font-mono ${isOpen ? c.text : 'text-stone-500'}`}>{br.label}</span>
+                  {!isBuilt && <span className="text-[8px] text-stone-700 font-mono">NEPOSTAVENO</span>}
+                </div>
+                <div className="text-[8px] text-stone-600">{br.effect}</div>
+              </div>
+
+              {/* Odběr a flow indicator */}
+              <div className="flex flex-col items-end flex-shrink-0">
+                <span className={`text-[9px] font-mono ${isOpen ? 'text-amber-700' : 'text-stone-700'}`}>
+                  −{br.cost.toFixed(2)}
+                </span>
+                {/* Flow animace */}
+                <div className="flex gap-0.5 mt-0.5">
+                  {[0,1,2].map(i => (
+                    <div
+                      key={i}
+                      className={`w-1 h-1 rounded-full transition-all ${active ? c.dot : 'bg-stone-800'}`}
+                      style={active ? { animationDelay: `${i * 0.15}s`, animation: 'pulse 0.8s ease-in-out infinite' } : {}}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Varování */}
+      {totalDrop > boilerP && boilerP > 0.1 && (
+        <div className="mt-2 text-[9px] text-red-400 bg-red-950/30 border border-red-800/40 rounded p-1.5 font-mono">
+          ⚠ Odběr převyšuje tlak kotle — část větví nefunguje!
+        </div>
+      )}
+      {buildings.boiler.pressure < 0.5 && (
+        <div className="mt-2 text-[9px] text-stone-600 bg-stone-950 border border-stone-800 rounded p-1.5 font-mono text-center">
+          Kotel nevyrábí páru
+        </div>
+      )}
+    </FloatingPanel>
+  );
+};
+
 // ─── INTRO SCREEN ────────────────────────────────────────────────────────────
 
 const INTRO_SLIDES = [
@@ -1693,6 +1870,7 @@ export default function App() {
         <LeftSidebar />
         <GameCanvas />
         <Modal />
+        <DistributorPanel />
         {introStep >= 0 && <IntroScreen />}
       </div>
       <BottomBar />
