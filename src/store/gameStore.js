@@ -97,35 +97,35 @@ export const useGameStore = create((set, get) => ({
   // --- STAVY ---
   stats: { health: 82, food: 65, heat: 15, water: 65, power: 30 },
 
-  // --- SUROVINY --- (testovací zásoby — dost na stavbu všeho)
-  resources: { scrap: 200, wood: 80, coal: 20, parts: 20, gaskets: 10, chemicals: 5, chips: 60 },
+  // --- SUROVINY --- (testovací zásoby)
+  resources: { scrap: 999, wood: 500, coal: 100, parts: 100, gaskets: 50, chemicals: 20, chips: 300 },
 
   // --- ZÁSOBNÍK VODY (sudy) ---
-  reservoirWater: 40,
-  waterBarrels: 1,
+  reservoirWater: 80,
+  waterBarrels: 3,
 
-  // --- BUDOVY ---
+  // --- BUDOVY --- (vše odemčené a postavené pro testování)
   buildings: {
     boiler: {
       built: true, level: 1,
-      temp: 12,        // °C — studený kotel
-      pressure: 0,     // bar (0-15)
-      water: 20,       // litrů — málo vody
-      integrity: 100,
-      fuelType: null,
-      fuelTimer: 0,
-      scale: 0,
+      temp: 12, pressure: 0, water: 60,
+      integrity: 100, fuelType: null, fuelTimer: 0, scale: 0,
     },
-    collector:  { built: false, level: 1 },
-    dynamo:     { built: false, level: 1 },
-    distillery: { built: false, level: 1 },
-    greenhouse: { built: false, level: 1 },
-    workshop:   { built: false, level: 1 },
+    collector:    { built: true,  level: 2 },
+    dynamo:       { built: true,  level: 1 },
+    distillery:   { built: true,  level: 1 },
+    greenhouse:   { built: true,  level: 1 },
+    workshop:     { built: true,  level: 1 },
     defense_vent: { built: false, level: 1 },
   },
 
-  // --- TRUBKY ---
-  pipes: {},
+  // --- TRUBKY --- (předinstalované pro postavené budovy)
+  pipes: {
+    boiler_collector:  { material: 'copper', integrity: 100, maxIntegrityCap: 100, isLeaking: false, pressure: 0 },
+    boiler_dynamo:     { material: 'copper', integrity: 100, maxIntegrityCap: 100, isLeaking: false, pressure: 0 },
+    boiler_distillery: { material: 'copper', integrity: 100, maxIntegrityCap: 100, isLeaking: false, pressure: 0 },
+    boiler_greenhouse: { material: 'wood',   integrity: 100, maxIntegrityCap: 100, isLeaking: false, pressure: 0 },
+  },
 
   // --- LOG & INVENTÁŘ ---
   messages: [],

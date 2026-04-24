@@ -757,28 +757,54 @@ const GameCanvas = () => {
           />
         </div>
 
-        {/* ROZDĚLOVAČ PÁRY — tlačítko pro otevření plovoucího panelu */}
-        <div className="absolute z-20" style={{ top: '4%', left: '50%', transform: 'translateX(-50%)' }}>
-          <button
-            onClick={() => toggleFloatingPanel('distributor')}
-            className={`flex flex-col items-center gap-1 px-4 py-2 rounded-lg border-2 font-mono transition shadow-lg ${
-              floatingPanels.distributor?.open
-                ? 'bg-amber-900/40 border-amber-600 text-amber-300'
-                : 'bg-stone-900/90 border-stone-600 text-stone-400 hover:border-amber-700 hover:text-amber-400'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <ArrowLeftRight size={14} />
-              <span className="text-[10px] font-bold tracking-widest">ROZDĚLOVAČ PÁRY</span>
+        {/* ROZDĚLOVAČ PÁRY — inline ventily + detail panel */}
+        <div className="absolute flex flex-col items-center z-20 pointer-events-none" style={{ top: '2%', left: '50%', transform: 'translateX(-50%)' }}>
+          <div className="flex gap-3 p-3 bg-stone-900 border-2 border-stone-700 rounded-lg shadow-xl relative pointer-events-auto">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-stone-950 px-2 text-[10px] text-amber-600 font-bold font-mono tracking-widest border border-stone-800 rounded whitespace-nowrap">ROZDĚLOVAČ PÁRY</div>
+
+            {[
+              { id: 'heating',    label: 'TOPENÍ',  icon: <Flame   size={14}/>, onColor: 'bg-amber-600  border-amber-400',  textColor: 'text-amber-400',  alwaysBuilt: true               },
+              { id: 'dynamo',     label: 'DYNAMO',  icon: <Zap     size={14}/>, onColor: 'bg-yellow-500 border-yellow-300', textColor: 'text-yellow-400', alwaysBuilt: false, bld: dynamo  },
+              { id: 'collector',  label: 'SBĚRAČ',  icon: <Waves   size={14}/>, onColor: 'bg-blue-600   border-blue-400',   textColor: 'text-blue-400',   alwaysBuilt: false, bld: collector},
+              { id: 'distillery', label: 'DESTIL.', icon: <Droplets size={14}/>,onColor: 'bg-cyan-600   border-cyan-400',   textColor: 'text-cyan-400',   alwaysBuilt: false, bld: distillery},
+              { id: 'greenhouse', label: 'PĚST.',   icon: <Wind    size={14}/>, onColor: 'bg-green-600  border-green-400',  textColor: 'text-green-400',  alwaysBuilt: false, bld: greenhouse},
+              { id: 'workshop',   label: 'DÍLNA',   icon: <Wrench  size={14}/>, onColor: 'bg-stone-500  border-stone-300',  textColor: 'text-stone-300',  alwaysBuilt: false, bld: workshop },
+            ].map(({ id, label, icon, onColor, textColor, alwaysBuilt, bld }) => {
+              const isBuilt = alwaysBuilt || bld?.built;
+              const isOn = valves[id] && isBuilt;
+              return (
+                <div key={id} className="flex flex-col items-center">
+                  <button
+                    onClick={() => isBuilt && toggleValve(id)}
+                    disabled={!isBuilt}
+                    className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-30 ${isOn ? `${onColor} shadow-[0_0_10px_rgba(217,119,6,0.4)]` : 'bg-stone-800 border-stone-600'}`}
+                  >
+                    <span className={isOn ? 'text-stone-900' : 'text-stone-500'}>{icon}</span>
+                  </button>
+                  <div className={`text-[9px] mt-1 font-mono font-bold ${isOn ? textColor : 'text-stone-500'} ${!isBuilt && 'opacity-30'}`}>{label}</div>
+                </div>
+              );
+            })}
+
+            {/* Tlačítko detail */}
+            <div className="flex flex-col items-center justify-center ml-1 pl-2 border-l border-stone-700">
+              <button
+                onClick={() => toggleFloatingPanel('distributor')}
+                className={`w-8 h-8 rounded border flex items-center justify-center transition ${floatingPanels.distributor?.open ? 'bg-amber-900/50 border-amber-600 text-amber-400' : 'bg-stone-800 border-stone-600 text-stone-500 hover:border-amber-700 hover:text-amber-400'}`}
+                title="Detail tlaku"
+              >
+                <TrendingUp size={12} />
+              </button>
+              <div className="text-[9px] mt-1 font-mono text-stone-600">DETAIL</div>
             </div>
-            <div className="flex gap-1">
-              {['heating','dynamo','collector','distillery','greenhouse','workshop'].map(v => (
-                <div key={v} className={`w-1.5 h-1.5 rounded-full ${valves[v] ? 'bg-amber-400' : 'bg-stone-700'}`} />
-              ))}
-            </div>
-          </button>
+          </div>
+
+          {/* Trubka dolů do kotle */}
+          <div className="w-6 h-[8vh] bg-gradient-to-r from-stone-800 via-stone-600 to-stone-800 border-l-2 border-r-2 border-stone-900 shadow-inner" />
         </div>
+
       </div>
+      <DistributorPanel />
     </div>
   );
 };
@@ -1870,7 +1896,6 @@ export default function App() {
         <LeftSidebar />
         <GameCanvas />
         <Modal />
-        <DistributorPanel />
         {introStep >= 0 && <IntroScreen />}
       </div>
       <BottomBar />
