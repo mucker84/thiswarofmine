@@ -526,284 +526,459 @@ const Pipe = ({ active, style, className }) => (
   </div>
 );
 
-// ─── GAME CANVAS ─────────────────────────────────────────────────────────────
+// ─── HOUSE CROSS-SECTION SVG ─────────────────────────────────────────────────
+//
+// viewBox: 800 × 500
+// Layout (y↓):
+//   Střecha/půda:   y 0–80
+//   Patro 1:        y 80–210   (ložnice vlevo | tech místnost vpravo)
+//   Přízemí:        y 210–340  (obývák vlevo  | chodba+vstup vpravo)
+//   Sklep:          y 340–500  (kotelna vlevo | sklad+sudy vpravo)
+//
+// Trubky vedou po zdech jako lomené čáry s animací.
 
-// ─── PIPE OVERLAY ────────────────────────────────────────────────────────────
+const HOUSE = {
+  W: 800, H: 500,
+  // Svislé dělicí čáry
+  midX: 440,      // střed domu (dělí levou a pravou část)
+  leftWall:  40,
+  rightWall: 760,
+  // Vodorovné podlahy
+  roofTop:    20,
+  atticBot:   80,
+  floor1Bot: 210,
+  floor0Bot: 340,
+  basementBot:500,
+  // Barvy zdí
+  wallStroke: '#44403c',
+  wallFill:   '#1c1917',
+  roomFill:   '#0c0a09',
+};
 
-const PipeOverlay = () => {
-  const { pipes, buildings, setActiveModal } = useGameStore();
+// Barvy trubek
+const PIPE_COLOR = {
+  steam:     { idle: '#78350f', active: '#f97316', glow: 'rgba(249,115,22,0.5)' },
+  water:     { idle: '#1e3a5f', active: '#3b82f6', glow: 'rgba(59,130,246,0.4)' },
+  condensate:{ idle: '#164e63', active: '#06b6d4', glow: 'rgba(6,182,212,0.4)' },
+};
 
+// Animovaná trubka — SVG path s flow animací
+const SvgPipe = ({ d, type = 'steam', active = false, onClick, pressure = 0, leaking = false }) => {
+  const col = PIPE_COLOR[type] ?? PIPE_COLOR.steam;
+  const color = leaking ? '#dc2626' : (active ? col.active : col.idle);
+  const sw = type === 'steam' ? 3.5 : 2.5;
   return (
-    <svg
-      viewBox="0 0 160 90"
-      className="absolute inset-0 w-full h-full pointer-events-none"
-      style={{ zIndex: 5 }}
-    >
-      <defs>
-        <filter id="glow">
-          <feGaussianBlur stdDeviation="0.5" result="blur" />
-          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-        </filter>
-      </defs>
-
-      {Object.entries(PIPE_COORDS).map(([pipeId, pos]) => {
-        const destBuilding = pipeId.replace('boiler_', '');
-        if (!buildings[destBuilding]?.built) return null;
-
-        const pipe = pipes[pipeId];
-        if (!pipe) return null;
-
-        const mat     = MATERIALS[pipe.material];
-        const burst   = pipe.integrity <= 0;
-        const color   = burst
-          ? '#1f2937'
-          : pipe.isLeaking
-          ? '#dc2626'
-          : (pipe.pressure > 0 ? mat.activeColor : mat.color);
-
-        const sw      = mat.strokeWidth;
-        const active  = pipe.pressure > 0 && !burst;
-        const midX    = (pos.x1 + pos.x2) / 2;
-        const midY    = (pos.y1 + pos.y2) / 2;
-
-        return (
-          <g
-            key={pipeId}
-            className="pointer-events-auto"
-            style={{ cursor: 'pointer' }}
-            onClick={() => setActiveModal(`pipe_${pipeId}`)}
-          >
-            {/* Hit area */}
-            <line x1={pos.x1} y1={pos.y1} x2={pos.x2} y2={pos.y2}
-              stroke="transparent" strokeWidth={4} />
-
-            {/* Pipe body */}
-            <line x1={pos.x1} y1={pos.y1} x2={pos.x2} y2={pos.y2}
-              stroke={color}
-              strokeWidth={sw}
-              strokeOpacity={burst ? 0.25 : 1}
-              strokeDasharray={burst ? '2 2' : 'none'}
-              filter={active ? 'url(#glow)' : 'none'}
-            />
-
-            {/* Flow animation */}
-            {active && !pipe.isLeaking && (
-              <line x1={pos.x1} y1={pos.y1} x2={pos.x2} y2={pos.y2}
-                stroke={color} strokeWidth={sw * 0.6} strokeOpacity={0.6}
-                strokeDasharray="3 7"
-              >
-                <animate attributeName="stroke-dashoffset" from="0" to="-10"
-                  dur={pipe.material === 'steel' ? '0.6s' : pipe.material === 'copper' ? '0.9s' : '1.3s'}
-                  repeatCount="indefinite" />
-              </line>
-            )}
-
-            {/* Leak pulse */}
-            {pipe.isLeaking && !burst && (
-              <circle cx={midX} cy={midY} r="1.8" fill="#dc2626">
-                <animate attributeName="opacity" values="0.3;1;0.3" dur="0.7s" repeatCount="indefinite" />
-                <animate attributeName="r" values="1.2;2.2;1.2" dur="0.7s" repeatCount="indefinite" />
-              </circle>
-            )}
-
-            {/* Integrity label on hover (always visible when low) */}
-            {pipe.integrity < 40 && !burst && (
-              <text x={midX} y={midY - 2.5} textAnchor="middle"
-                fontSize="3.5" fill={pipe.isLeaking ? '#dc2626' : '#f97316'}
-                fontFamily="monospace">
-                {Math.round(pipe.integrity)}%
-              </text>
-            )}
-          </g>
-        );
-      })}
-    </svg>
+    <g onClick={onClick} style={onClick ? { cursor: 'pointer' } : {}}>
+      {/* Hit area */}
+      {onClick && <path d={d} fill="none" stroke="transparent" strokeWidth={12} />}
+      {/* Trubka */}
+      <path d={d} fill="none" stroke={color} strokeWidth={sw}
+        strokeLinecap="round" strokeLinejoin="round"
+        strokeDasharray={leaking ? '4 4' : 'none'}
+        opacity={active ? 1 : 0.35}
+      />
+      {/* Flow animace */}
+      {active && !leaking && (
+        <path d={d} fill="none" stroke={color} strokeWidth={sw * 0.5}
+          strokeLinecap="round" strokeDasharray="8 16" opacity={0.7}>
+          <animate attributeName="stroke-dashoffset" from="0" to="-24"
+            dur="1.2s" repeatCount="indefinite" />
+        </path>
+      )}
+      {/* Záře když tlak */}
+      {active && pressure > 2 && (
+        <path d={d} fill="none" stroke={col.glow} strokeWidth={sw * 3}
+          opacity={Math.min(0.4, pressure / 20)} strokeLinecap="round" />
+      )}
+      {/* Leak pulse */}
+      {leaking && (
+        <path d={d} fill="none" stroke="#dc2626" strokeWidth={sw * 1.5}
+          strokeDasharray="2 20" opacity={0.8}>
+          <animate attributeName="stroke-dashoffset" from="0" to="22"
+            dur="0.5s" repeatCount="indefinite" />
+        </path>
+      )}
+    </g>
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// Klikatelný slot v místnosti
+const RoomSlot = ({ x, y, w, h, label, sublabel, built, active, color = '#78350f', onClick, children }) => (
+  <g onClick={onClick} style={{ cursor: 'pointer' }}>
+    <rect x={x} y={y} width={w} height={h} rx={3}
+      fill={built ? '#1c1410' : '#111'}
+      stroke={built ? color : '#292524'}
+      strokeWidth={built ? 1.5 : 1}
+      opacity={built ? 1 : 0.5}
+    />
+    {built && active && (
+      <rect x={x} y={y} width={w} height={h} rx={3}
+        fill="none" stroke={color} strokeWidth={2} opacity={0.5}>
+        <animate attributeName="opacity" values="0.2;0.6;0.2" dur="2s" repeatCount="indefinite" />
+      </rect>
+    )}
+    {children}
+    <text x={x + w / 2} y={y + h / 2 + (sublabel ? -5 : 4)} textAnchor="middle"
+      fontSize={10} fill={built ? '#d6d3d1' : '#57534e'} fontFamily="monospace" fontWeight="bold">
+      {label}
+    </text>
+    {sublabel && (
+      <text x={x + w / 2} y={y + h / 2 + 9} textAnchor="middle"
+        fontSize={8} fill={built ? color : '#44403c'} fontFamily="monospace">
+        {sublabel}
+      </text>
+    )}
+  </g>
+);
+
+// Sud s vodou
+const SvgBarrel = ({ x, y, fillPct, label, onClick }) => {
+  const h = 36; const w = 22;
+  const fillH = Math.round(h * fillPct / 100);
+  return (
+    <g onClick={onClick} style={{ cursor: 'pointer' }}>
+      <rect x={x} y={y} width={w} height={h} rx={4} fill="#1c1917" stroke="#44403c" strokeWidth={1.5} />
+      <rect x={x + 1} y={y + h - fillH} width={w - 2} height={fillH} rx={3}
+        fill={fillPct > 20 ? '#1d4ed8' : '#dc2626'} opacity={0.8} />
+      {/* Obruče */}
+      <line x1={x} y1={y + 8}  x2={x + w} y2={y + 8}  stroke="#57534e" strokeWidth={1} />
+      <line x1={x} y1={y + 28} x2={x + w} y2={y + 28} stroke="#57534e" strokeWidth={1} />
+      <text x={x + w / 2} y={y + h + 11} textAnchor="middle" fontSize={7}
+        fill="#78716c" fontFamily="monospace">{label}</text>
+    </g>
+  );
+};
+
+// Radiátor v místnosti
+const SvgRadiator = ({ x, y, active }) => (
+  <g>
+    {[0,1,2,3].map(i => (
+      <rect key={i} x={x + i * 9} y={y} width={7} height={22} rx={2}
+        fill={active ? '#7c2d12' : '#1c1917'} stroke={active ? '#ea580c' : '#292524'} strokeWidth={1} />
+    ))}
+    {active && (
+      <g opacity={0.6}>
+        {[4,13,22,31].map((xi, i) => (
+          <path key={i} d={`M${x + xi} ${y - 2} q3 -5 0 -10`}
+            fill="none" stroke="#fed7aa" strokeWidth={1}>
+            <animate attributeName="opacity" values="0;0.8;0" dur={`${1 + i * 0.2}s`} repeatCount="indefinite" />
+          </path>
+        ))}
+      </g>
+    )}
+  </g>
+);
+
+// Ventil — kruh s ikonou, klikací
+const SvgValve = ({ x, y, open, label, color, onClick, disabled }) => (
+  <g onClick={!disabled ? onClick : undefined} style={{ cursor: disabled ? 'default' : 'pointer' }} opacity={disabled ? 0.3 : 1}>
+    <circle cx={x} cy={y} r={9}
+      fill={open ? color : '#1c1917'}
+      stroke={open ? color : '#44403c'}
+      strokeWidth={1.5} />
+    {open && <circle cx={x} cy={y} r={9} fill="none" stroke={color} strokeWidth={2} opacity={0.5}>
+      <animate attributeName="r" values="9;12;9" dur="1.5s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0.5;0;0.5" dur="1.5s" repeatCount="indefinite" />
+    </circle>}
+    {/* Křížek = zavřeno, šipka = otevřeno */}
+    {open
+      ? <path d={`M${x-4} ${y} L${x+4} ${y} M${x} ${y-4} L${x} ${y+4}`} stroke="#0c0a09" strokeWidth={2} />
+      : <path d={`M${x-3} ${y-3} L${x+3} ${y+3} M${x+3} ${y-3} L${x-3} ${y+3}`} stroke="#57534e" strokeWidth={1.5} />
+    }
+    <text x={x} y={y + 18} textAnchor="middle" fontSize={7} fill={open ? color : '#57534e'} fontFamily="monospace">{label}</text>
+  </g>
+);
 
 const GameCanvas = () => {
-  const { buildings, setActiveModal, phase, stats, waterBarrels, reservoirWater, valves, toggleValve, setActiveLeftTab, floatingPanels, toggleFloatingPanel } = useGameStore();
+  const {
+    buildings, setActiveModal, phase, stats,
+    waterBarrels, reservoirWater,
+    valves, toggleValve,
+    floatingPanels, toggleFloatingPanel,
+    boiler: _b, distributorPressure, branchDrop,
+    rain,
+  } = useGameStore();
   const { boiler, dynamo, greenhouse, distillery, collector, workshop } = buildings;
-  const boilerActive = boiler.fuelTimer > 0;
+  const bp = boiler.pressure;
+  const boilerOn = boiler.temp > 100 && bp > 0.5;
+  const heatingOn = boilerOn && valves.heating;
+  const { W, H, midX, leftWall, rightWall, atticBot, floor1Bot, floor0Bot } = HOUSE;
+
+  // Trubkové cesty (SVG path d=)
+  // Hlavní parní stoupačka: kotel → rozdělovač (na levé zdi přízemí → patro)
+  const steamRiserD   = `M 120 ${floor0Bot - 10} L 120 ${atticBot + 10}`;
+  // Zpětná větev (kondenzát): patro → sklep pravou zdí
+  const returnD       = `M 680 ${floor1Bot - 10} L 680 ${floor0Bot + 10}`;
+  // Topný okruh přízemí: od stoupačky vpravo po zdi
+  const heat0D        = `M 120 ${floor0Bot - 60} L 380 ${floor0Bot - 60}`;
+  // Topný okruh patra
+  const heat1D        = `M 120 ${floor1Bot - 60} L 380 ${floor1Bot - 60}`;
+  // Voda ze sběrače dolů do sudů
+  const rainPipeD     = `M ${midX + 60} ${atticBot} L ${midX + 60} ${floor0Bot + 20} L 620 ${floor0Bot + 20} L 620 ${floor0Bot + 40}`;
+  // Pumpa ze sudů do kotle
+  const pumpToBoilerD = `M 580 ${floor0Bot + 60} L 120 ${floor0Bot + 60} L 120 ${floor0Bot + 10}`;
+
+  // Naplněnost sudů per sud
+  const barrelFills = Array.from({ length: Math.max(waterBarrels, 1) }, (_, i) =>
+    Math.min(100, Math.max(0, (reservoirWater - i * 100)))
+  );
 
   return (
-    <div className={`flex-1 relative overflow-hidden flex items-center justify-center transition-colors duration-3000 ${
-      phase === 'night' ? 'bg-stone-950' : 'bg-[#111]'
+    <div className={`flex-1 relative overflow-hidden flex items-center justify-center ${
+      phase === 'night' ? 'bg-stone-950' : 'bg-[#0d0c0b]'
     }`}>
-      {/* Mřížka */}
-      <div
-        className="absolute inset-0 opacity-[0.07]"
-        style={{ backgroundImage: 'linear-gradient(#555 1px, transparent 1px), linear-gradient(90deg, #555 1px, transparent 1px)', backgroundSize: '24px 24px' }}
-      />
+      {/* Noční overlay */}
+      {phase === 'night' && <div className="absolute inset-0 bg-blue-950/15 pointer-events-none z-10" />}
 
-      {/* Noční tma */}
-      {phase === 'night' && <div className="absolute inset-0 bg-blue-950/10 pointer-events-none" />}
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full h-full"
+        style={{ maxHeight: '100%', maxWidth: '100%' }}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <defs>
+          <filter id="steamGlow">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <filter id="softGlow">
+            <feGaussianBlur stdDeviation="6" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          {/* Gradient pro oheň v kotli */}
+          <radialGradient id="boilerGlow" cx="50%" cy="80%" r="60%">
+            <stop offset="0%" stopColor="#f97316" stopOpacity={boilerOn ? 0.25 : 0} />
+            <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
+          </radialGradient>
+        </defs>
 
-      {/* Záře od kotle v okolí */}
-      {boilerActive && (
-        <div
-          className="absolute pointer-events-none transition-opacity duration-2000"
-          style={{
-            left: '50%', top: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: '400px', height: '400px',
-            background: `radial-gradient(circle, rgba(251,146,60,${0.03 + Math.min(1, boiler.fuelTimer / 200) * 0.06}) 0%, transparent 70%)`,
-          }}
+        {/* ── POZADÍ MÍSTNOSTÍ ── */}
+        {/* Střecha / půda */}
+        <polygon points={`${leftWall},${atticBot} ${W/2},${HOUSE.roofTop} ${rightWall},${atticBot}`}
+          fill="#111" stroke={HOUSE.wallStroke} strokeWidth={2} />
+        {/* Střešní okap / sběrač deště */}
+        <rect x={leftWall} y={atticBot} width={rightWall - leftWall} height={20}
+          fill="#161412" stroke={HOUSE.wallStroke} strokeWidth={1.5} />
+
+        {/* Patro 1 vlevo — LOŽNICE */}
+        <rect x={leftWall} y={atticBot + 20} width={midX - leftWall} height={floor1Bot - atticBot - 20}
+          fill="#0f0e0d" stroke={HOUSE.wallStroke} strokeWidth={1.5} />
+        <text x={leftWall + 10} y={atticBot + 36} fontSize={9} fill="#44403c" fontFamily="monospace" fontWeight="bold">LOŽNICE</text>
+
+        {/* Patro 1 vpravo — TECH MÍSTNOST */}
+        <rect x={midX} y={atticBot + 20} width={rightWall - midX} height={floor1Bot - atticBot - 20}
+          fill="#0f0e0d" stroke={HOUSE.wallStroke} strokeWidth={1.5} />
+        <text x={midX + 10} y={atticBot + 36} fontSize={9} fill="#44403c" fontFamily="monospace" fontWeight="bold">TECH MÍSTNOST</text>
+
+        {/* Přízemí vlevo — OBÝVÁK */}
+        <rect x={leftWall} y={floor1Bot} width={midX - leftWall} height={floor0Bot - floor1Bot}
+          fill="#0f0e0d" stroke={HOUSE.wallStroke} strokeWidth={1.5} />
+        <text x={leftWall + 10} y={floor1Bot + 16} fontSize={9} fill="#44403c" fontFamily="monospace" fontWeight="bold">OBÝVÁK</text>
+
+        {/* Přízemí vpravo — CHODBA / VSTUP */}
+        <rect x={midX} y={floor1Bot} width={rightWall - midX} height={floor0Bot - floor1Bot}
+          fill="#0f0e0d" stroke={HOUSE.wallStroke} strokeWidth={1.5} />
+        <text x={midX + 10} y={floor1Bot + 16} fontSize={9} fill="#44403c" fontFamily="monospace" fontWeight="bold">VSTUPNÍ HALA</text>
+
+        {/* Sklep vlevo — KOTELNA */}
+        <rect x={leftWall} y={floor0Bot} width={midX - leftWall} height={H - floor0Bot}
+          fill="#100c08" stroke={HOUSE.wallStroke} strokeWidth={1.5} />
+        <text x={leftWall + 10} y={floor0Bot + 16} fontSize={9} fill="#44403c" fontFamily="monospace" fontWeight="bold">KOTELNA</text>
+
+        {/* Sklep vpravo — SKLAD */}
+        <rect x={midX} y={floor0Bot} width={rightWall - midX} height={H - floor0Bot}
+          fill="#100c08" stroke={HOUSE.wallStroke} strokeWidth={1.5} />
+        <text x={midX + 10} y={floor0Bot + 16} fontSize={9} fill="#44403c" fontFamily="monospace" fontWeight="bold">SKLAD / ZÁSOBY</text>
+
+        {/* ── TRUBKY (za objekty, pod interaktivními prvky) ── */}
+
+        {/* Parní stoupačka (oranžová) — hlavní osa */}
+        <SvgPipe d={steamRiserD} type="steam" active={boilerOn} pressure={bp} />
+
+        {/* Topení přízemí */}
+        <SvgPipe d={heat0D} type="steam" active={heatingOn} pressure={bp * 0.8} />
+
+        {/* Topení patro */}
+        <SvgPipe d={heat1D} type="steam" active={heatingOn} pressure={bp * 0.6} />
+
+        {/* Kondenzátní zpětná větev (modrá) */}
+        <SvgPipe d={returnD} type="condensate" active={heatingOn} />
+
+        {/* Voda ze sběrače (modrá) */}
+        <SvgPipe d={rainPipeD} type="water"
+          active={collector.built && (rain.isRaining || reservoirWater > 0)} />
+
+        {/* Pumpa do kotle */}
+        <SvgPipe d={pumpToBoilerD} type="water" active={boiler.water > 20} />
+
+        {/* ── ZÁŘE KOTLE ── */}
+        {boilerOn && (
+          <rect x={leftWall} y={floor0Bot} width={midX - leftWall} height={H - floor0Bot}
+            fill="url(#boilerGlow)" />
+        )}
+
+        {/* ── KOTEL (klikací) ── */}
+        <g onClick={() => setActiveModal('boiler')} style={{ cursor: 'pointer' }}>
+          {/* Tělo kotle */}
+          <ellipse cx={160} cy={floor0Bot + 95} rx={55} ry={70}
+            fill="#1c1410" stroke={bp > 8 ? '#dc2626' : bp > 3 ? '#92400e' : '#44403c'}
+            strokeWidth={bp > 8 ? 3 : 2} />
+          {bp > 8 && (
+            <ellipse cx={160} cy={floor0Bot + 95} rx={55} ry={70}
+              fill="none" stroke="#dc2626" strokeWidth={4} opacity={0.4}>
+              <animate attributeName="opacity" values="0.2;0.6;0.2" dur="0.8s" repeatCount="indefinite" />
+            </ellipse>
+          )}
+          {/* Průhled — plamen */}
+          <ellipse cx={160} cy={floor0Bot + 110} rx={28} ry={18}
+            fill={boilerOn ? '#7c2d12' : '#0c0a09'}
+            stroke="#292524" strokeWidth={1} />
+          {boilerOn && (
+            <>
+              <ellipse cx={160} cy={floor0Bot + 115} rx={16} ry={10} fill="#f97316" opacity={0.7}>
+                <animate attributeName="ry" values="10;13;10" dur="0.7s" repeatCount="indefinite" />
+              </ellipse>
+              <ellipse cx={160} cy={floor0Bot + 112} rx={8} ry={6} fill="#fde047" opacity={0.9}>
+                <animate attributeName="ry" values="6;9;6" dur="0.5s" repeatCount="indefinite" />
+              </ellipse>
+            </>
+          )}
+          {/* Budík teploty */}
+          <circle cx={118} cy={floor0Bot + 65} r={14}
+            fill="#e7e5e4" stroke="#92400e" strokeWidth={2} />
+          <line
+            x1={118} y1={floor0Bot + 65}
+            x2={118 + Math.cos((boiler.temp / 350 * 240 - 210) * Math.PI / 180) * 10}
+            y2={floor0Bot + 65 + Math.sin((boiler.temp / 350 * 240 - 210) * Math.PI / 180) * 10}
+            stroke={boiler.temp > 200 ? '#dc2626' : boiler.temp > 100 ? '#f97316' : '#3b82f6'}
+            strokeWidth={2} strokeLinecap="round" />
+          <circle cx={118} cy={floor0Bot + 65} r={2} fill="#1c1917" />
+          <text x={118} y={floor0Bot + 83} textAnchor="middle" fontSize={7}
+            fill={boiler.temp > 100 ? '#f97316' : '#78716c'} fontFamily="monospace">
+            {Math.round(boiler.temp)}°C
+          </text>
+          {/* Budík tlaku */}
+          <circle cx={200} cy={floor0Bot + 65} r={16}
+            fill="#e7e5e4" stroke={bp > 8 ? '#dc2626' : '#92400e'} strokeWidth={2} />
+          <line
+            x1={200} y1={floor0Bot + 65}
+            x2={200 + Math.cos((bp / 15 * 240 - 210) * Math.PI / 180) * 12}
+            y2={floor0Bot + 65 + Math.sin((bp / 15 * 240 - 210) * Math.PI / 180) * 12}
+            stroke={bp > 8 ? '#dc2626' : bp > 3 ? '#f97316' : '#6b7280'}
+            strokeWidth={2} strokeLinecap="round" />
+          <circle cx={200} cy={floor0Bot + 65} r={2} fill="#1c1917" />
+          <text x={200} y={floor0Bot + 85} textAnchor="middle" fontSize={7}
+            fill={bp > 8 ? '#dc2626' : bp > 3 ? '#f97316' : '#78716c'} fontFamily="monospace">
+            {bp.toFixed(1)} bar
+          </text>
+          {/* Label kotle */}
+          <text x={160} y={floor0Bot + 45} textAnchor="middle" fontSize={9}
+            fill="#d97706" fontFamily="monospace" fontWeight="bold">HLAVNÍ KOTEL</text>
+          <text x={160} y={floor0Bot + 175} textAnchor="middle" fontSize={8}
+            fill="#57534e" fontFamily="monospace">[ kliknout pro správu ]</text>
+        </g>
+
+        {/* ── VENTILY NA STOUPAČCE ── */}
+        {/* Ventil topení — na stoupačce v přízemí */}
+        <SvgValve x={120} y={floor1Bot + 40} open={valves.heating} color="#f97316"
+          label="TOPENÍ" onClick={() => toggleValve('heating')} />
+
+        {/* ── RADIÁTORY ── */}
+        {/* Obývák */}
+        <SvgRadiator x={200} y={floor0Bot + 20} active={heatingOn} />
+        {/* Ložnice */}
+        <SvgRadiator x={200} y={floor1Bot + 30} active={heatingOn} />
+
+        {/* ── SBĚRAČ DEŠTĚ (půda) ── */}
+        <RoomSlot
+          x={midX - 80} y={HOUSE.roofTop + 5} w={160} h={42}
+          label="SBĚRAČ DEŠTĚ"
+          sublabel={collector.built ? (rain.isRaining ? '🌧 plní se' : `${Math.round(reservoirWater)} / ${waterBarrels * 100} L`) : 'POSTAVIT'}
+          built={collector.built} active={rain.isRaining}
+          color="#3b82f6"
+          onClick={() => setActiveModal('build_collector')}
         />
-      )}
+        {/* Déšť animace */}
+        {rain.isRaining && (
+          <g opacity={0.5}>
+            {[360,380,400,420,440,460,480].map((x, i) => (
+              <line key={i} x1={x} y1={HOUSE.roofTop + 5} x2={x - 4} y2={HOUSE.roofTop + 18}
+                stroke="#3b82f6" strokeWidth={1.5}>
+                <animate attributeName="y1" values={`${HOUSE.roofTop};${HOUSE.roofTop + 8};${HOUSE.roofTop}`}
+                  dur={`${0.6 + i * 0.07}s`} repeatCount="indefinite" />
+              </line>
+            ))}
+          </g>
+        )}
 
-      <div className="relative w-full max-w-4xl" style={{ aspectRatio: '16/9' }}>
-        <PipeOverlay />
-        {/* Nápisy místností */}
-        <div className="absolute top-8 left-10 text-stone-700 font-mono text-lg tracking-widest font-bold z-0">SKLADIŠTĚ</div>
-        <div className="absolute top-8 right-10 text-stone-700 font-mono text-lg tracking-widest font-bold z-0">OBYTNÁ ČÁST</div>
-        <div className="absolute bottom-8 right-10 text-stone-700 font-mono text-sm tracking-widest font-bold z-0">DÍLNA</div>
-        <div className="absolute bottom-8 left-10 text-stone-700 font-mono text-sm tracking-widest font-bold z-0">PŘÍSTUP</div>
-
-        {/* Kotel — střed */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div className="pointer-events-auto">
-            <Boiler
-              temp={boiler.temp}
-              pressure={boiler.pressure}
-              water={boiler.water}
-              fuelType={boiler.fuelType}
-              fuelTimer={boiler.fuelTimer}
-              integrity={boiler.integrity}
-              onClick={() => setActiveModal('boiler')}
-            />
-          </div>
-        </div>
-
-        {/* Kompresor — vlevo dole */}
-        <div className="absolute z-10" style={{ bottom: '10%', left: '8%' }}>
-          <BuildNode
-            title="KOMPRESOR"
-            built={dynamo.built}
-            effect="💨 +PNEUMATIKA"
-            icon={<Wind size={28} className={dynamo.built ? 'text-yellow-400' : 'text-stone-500 group-hover:text-yellow-400'} />}
-            onClick={() => setActiveModal('build_dynamo')}
+        {/* ── SUDY VE SKLEPĚ ── */}
+        {barrelFills.map((fill, i) => (
+          <SvgBarrel key={i}
+            x={530 + i * 35} y={floor0Bot + 40}
+            fillPct={fill}
+            label={`${Math.round(fill)}L`}
+            onClick={() => setActiveModal('build_barrel')}
           />
-        </div>
+        ))}
+        <text x={580} y={floor0Bot + 26} textAnchor="middle" fontSize={8}
+          fill="#57534e" fontFamily="monospace">ZÁSOBNÍK VODY</text>
 
-        {/* Parní Odfuk — u dveří vlevo */}
-        <div className="absolute z-10" style={{ top: '40%', left: '8%' }}>
-          <BuildNode
-            title="PARNÍ ODFUK"
-            built={buildings.defense_vent?.built}
-            effect="♨️ OBRANA"
-            icon={<CloudRain size={28} className={buildings.defense_vent?.built ? 'text-red-400' : 'text-stone-500 group-hover:text-red-400'} />}
-            onClick={() => setActiveModal('build_defense_vent')}
-          />
-        </div>
+        {/* ── SLOT: DÍLNA (přízemí vpravo) ── */}
+        <RoomSlot
+          x={midX + 20} y={floor1Bot + 20} w={120} h={50}
+          label="DÍLNA" sublabel={workshop.built ? '🛠 aktivní' : 'POSTAVIT'}
+          built={workshop.built} active={workshop.built} color="#a8a29e"
+          onClick={() => setActiveModal('build_workshop')}
+        />
 
-        {/* Pěstírna — vpravo dole */}
-        <div className="absolute z-10" style={{ bottom: '10%', right: '8%' }}>
-          <BuildNode
-            title="PĚSTÍRNA"
-            built={greenhouse.built}
-            effect="🌱 -HLAD"
-            icon={<Wind size={28} className={greenhouse.built ? 'text-green-400' : 'text-stone-500 group-hover:text-green-400'} />}
-            onClick={() => setActiveModal('build_greenhouse')}
-          />
-        </div>
+        {/* ── SLOT: PĚSTÍRNA (tech místnost) ── */}
+        <RoomSlot
+          x={midX + 20} y={atticBot + 30} w={120} h={50}
+          label="PĚSTÍRNA" sublabel={greenhouse.built ? '🌱 roste' : 'POSTAVIT'}
+          built={greenhouse.built} active={greenhouse.built} color="#16a34a"
+          onClick={() => setActiveModal('build_greenhouse')}
+        />
 
-        {/* Sběrač kondenzátu — vlevo nahoře */}
-        <div className="absolute z-10" style={{ top: '12%', left: '8%' }}>
-          <BuildNode
-            title="SBĚRAČ"
-            built={collector.built}
-            effect={collector.built && !boilerActive ? '💧 čeká na kotel' : `💧 +VODA (Lvl ${collector.level || 0})`}
-            effectMuted={collector.built && !boilerActive}
-            icon={<Waves size={28} className={collector.built ? (boilerActive ? 'text-blue-400' : 'text-blue-700') : 'text-stone-500 group-hover:text-blue-400'} />}
-            onClick={() => setActiveModal('build_collector')}
-          />
-        </div>
+        {/* ── SLOT: DESTILÉRKA (tech místnost) ── */}
+        <RoomSlot
+          x={midX + 160} y={atticBot + 30} w={120} h={50}
+          label="DESTILÉRKA" sublabel={distillery.built ? '💧 aktivní' : 'POSTAVIT'}
+          built={distillery.built} active={distillery.built && boilerOn} color="#0891b2"
+          onClick={() => setActiveModal('build_distillery')}
+        />
 
-        {/* Sudy na vodu — nahoře uprostřed */}
-        <div className="absolute flex gap-1 z-10" style={{ top: '15%', left: '35%' }}>
-          {[...Array(waterBarrels)].map((_, i) => {
-            const fill = Math.min(100, Math.max(0, reservoirWater - i * 100));
-            return (
-              <div key={i} className="w-10 h-14 bg-stone-800 border-2 border-stone-700 rounded flex flex-col justify-end overflow-hidden cursor-pointer shadow-lg hover:border-amber-500" onClick={() => setActiveModal('build_barrel')} title={`Sud ${i+1}: ${Math.round(fill)}/100 L`}>
-                <div className="w-full bg-blue-500/80 transition-all duration-1000" style={{ height: `${fill}%` }} />
-              </div>
-            );
-          })}
-        </div>
+        {/* ── SLOT: DYNAMO (chodba) ── */}
+        <RoomSlot
+          x={midX + 160} y={floor1Bot + 20} w={120} h={50}
+          label="DYNAMO" sublabel={dynamo.built ? `⚡ ${stats.power.toFixed(0)}%` : 'POSTAVIT'}
+          built={dynamo.built} active={dynamo.built && boilerOn} color="#eab308"
+          onClick={() => setActiveModal('build_dynamo')}
+        />
 
-        {/* Destilérka — vpravo nahoře */}
-        <div className="absolute z-10" style={{ top: '12%', right: '8%' }}>
-          <BuildNode
-            title="DESTILÉRKA"
-            built={distillery.built}
-            effect={distillery.built && !boilerActive ? '💧 čeká na kotel' : '💧💧 +VODA+'}
-            effectMuted={distillery.built && !boilerActive}
-            icon={<Droplets size={28} className={distillery.built ? (boilerActive ? 'text-cyan-400' : 'text-cyan-800') : 'text-stone-500 group-hover:text-cyan-400'} />}
-            onClick={() => setActiveModal('build_distillery')}
-          />
-        </div>
+        {/* ── PLOVOUCÍ PANEL TLAČÍTKO ── */}
+        <g onClick={() => toggleFloatingPanel('distributor')} style={{ cursor: 'pointer' }}>
+          <rect x={leftWall + 10} y={floor1Bot + 15} width={85} height={26} rx={4}
+            fill={floatingPanels.distributor?.open ? '#451a03' : '#1c1917'}
+            stroke={floatingPanels.distributor?.open ? '#f97316' : '#44403c'}
+            strokeWidth={1.5} />
+          <text x={leftWall + 52} y={floor1Bot + 32} textAnchor="middle" fontSize={9}
+            fill={floatingPanels.distributor?.open ? '#f97316' : '#78716c'}
+            fontFamily="monospace" fontWeight="bold">▶ ROZVOD PÁRY</text>
+        </g>
 
-        {/* Dílna — vpravo uprostřed */}
-        <div className="absolute z-10" style={{ top: '40%', right: '8%' }}>
-          <BuildNode
-            title="DÍLNA"
-            built={workshop.built}
-            effect={workshop.built ? '🛠 CRAFTING' : 'STAVĚT'}
-            icon={<Wrench size={28} className={workshop.built ? 'text-stone-300' : 'text-stone-500 group-hover:text-stone-300'} />}
-            onClick={() => workshop.built ? setActiveLeftTab('crafting') : setActiveModal('build_workshop')}
-          />
-        </div>
+        {/* ── LEGENDA ── */}
+        <g>
+          <text x={leftWall + 5} y={H - 20} fontSize={7} fill="#44403c" fontFamily="monospace">
+            — pára  — voda  — kondenzát
+          </text>
+          <line x1={leftWall + 5}  y1={H - 12} x2={leftWall + 25} y2={H - 12} stroke="#f97316" strokeWidth={2} />
+          <line x1={leftWall + 55} y1={H - 12} x2={leftWall + 75} y2={H - 12} stroke="#3b82f6" strokeWidth={2} />
+          <line x1={leftWall + 105} y1={H - 12} x2={leftWall + 125} y2={H - 12} stroke="#06b6d4" strokeWidth={2} />
+        </g>
 
-        {/* ROZDĚLOVAČ PÁRY — inline ventily + detail panel */}
-        <div className="absolute flex flex-col items-center z-20 pointer-events-none" style={{ top: '2%', left: '50%', transform: 'translateX(-50%)' }}>
-          <div className="flex gap-3 p-3 bg-stone-900 border-2 border-stone-700 rounded-lg shadow-xl relative pointer-events-auto">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-stone-950 px-2 text-[10px] text-amber-600 font-bold font-mono tracking-widest border border-stone-800 rounded whitespace-nowrap">ROZDĚLOVAČ PÁRY</div>
+      </svg>
 
-            {[
-              { id: 'heating',    label: 'TOPENÍ',  icon: <Flame   size={14}/>, onColor: 'bg-amber-600  border-amber-400',  textColor: 'text-amber-400',  alwaysBuilt: true               },
-              { id: 'dynamo',     label: 'DYNAMO',  icon: <Zap     size={14}/>, onColor: 'bg-yellow-500 border-yellow-300', textColor: 'text-yellow-400', alwaysBuilt: false, bld: dynamo  },
-              { id: 'collector',  label: 'SBĚRAČ',  icon: <Waves   size={14}/>, onColor: 'bg-blue-600   border-blue-400',   textColor: 'text-blue-400',   alwaysBuilt: false, bld: collector},
-              { id: 'distillery', label: 'DESTIL.', icon: <Droplets size={14}/>,onColor: 'bg-cyan-600   border-cyan-400',   textColor: 'text-cyan-400',   alwaysBuilt: false, bld: distillery},
-              { id: 'greenhouse', label: 'PĚST.',   icon: <Wind    size={14}/>, onColor: 'bg-green-600  border-green-400',  textColor: 'text-green-400',  alwaysBuilt: false, bld: greenhouse},
-              { id: 'workshop',   label: 'DÍLNA',   icon: <Wrench  size={14}/>, onColor: 'bg-stone-500  border-stone-300',  textColor: 'text-stone-300',  alwaysBuilt: false, bld: workshop },
-            ].map(({ id, label, icon, onColor, textColor, alwaysBuilt, bld }) => {
-              const isBuilt = alwaysBuilt || bld?.built;
-              const isOn = valves[id] && isBuilt;
-              return (
-                <div key={id} className="flex flex-col items-center">
-                  <button
-                    onClick={() => isBuilt && toggleValve(id)}
-                    disabled={!isBuilt}
-                    className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-30 ${isOn ? `${onColor} shadow-[0_0_10px_rgba(217,119,6,0.4)]` : 'bg-stone-800 border-stone-600'}`}
-                  >
-                    <span className={isOn ? 'text-stone-900' : 'text-stone-500'}>{icon}</span>
-                  </button>
-                  <div className={`text-[9px] mt-1 font-mono font-bold ${isOn ? textColor : 'text-stone-500'} ${!isBuilt && 'opacity-30'}`}>{label}</div>
-                </div>
-              );
-            })}
-
-            {/* Tlačítko detail */}
-            <div className="flex flex-col items-center justify-center ml-1 pl-2 border-l border-stone-700">
-              <button
-                onClick={() => toggleFloatingPanel('distributor')}
-                className={`w-8 h-8 rounded border flex items-center justify-center transition ${floatingPanels.distributor?.open ? 'bg-amber-900/50 border-amber-600 text-amber-400' : 'bg-stone-800 border-stone-600 text-stone-500 hover:border-amber-700 hover:text-amber-400'}`}
-                title="Detail tlaku"
-              >
-                <TrendingUp size={12} />
-              </button>
-              <div className="text-[9px] mt-1 font-mono text-stone-600">DETAIL</div>
-            </div>
-          </div>
-
-          {/* Trubka dolů do kotle */}
-          <div className="w-6 h-[8vh] bg-gradient-to-r from-stone-800 via-stone-600 to-stone-800 border-l-2 border-r-2 border-stone-900 shadow-inner" />
-        </div>
-
-      </div>
+      {/* Plovoucí panel rozdělovače */}
       <DistributorPanel />
     </div>
   );
