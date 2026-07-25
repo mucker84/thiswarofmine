@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>How Long Does It Take to Decompose? — Interactive Chart | 7ax.fun</title>
+  <meta name="description" content="How long does it take for plastic, glass, or a cigarette butt to decompose? Interactive decomposition-time chart — pick items and compare their footprint on a timeline.">
+  <meta name="keywords" content="how long does it take to decompose, decomposition time, decay time chart, plastic bottle decompose, cigarette butt decompose, waste in nature">
+  <meta name="author" content="7ax.fun">
+  <link rel="canonical" href="https://7ax.fun/decompose/">
+
+  <meta property="og:title" content="How Long Does It Take to Decompose? — Interactive Chart">
+  <meta property="og:description" content="Pick everyday items and compare how long they take to decompose in nature — on one interactive timeline.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://7ax.fun/decompose/">
+  <meta property="og:locale" content="en_US">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="How Long Does It Take to Decompose? — Interactive Chart">
+  <meta name="twitter:description" content="Pick everyday items and compare how long they take to decompose in nature.">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "How Long Does It Take to Decompose? — Interactive Chart",
+    "description": "Interactive guide to decomposition times of common items in nature.",
+    "url": "https://7ax.fun/decompose/",
+    "inLanguage": "en",
+    "publisher": { "@type": "Organization", "name": "7ax.fun", "url": "https://7ax.fun" }
+  }
+  </script>
+
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-QQTD6TPJ7R"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-QQTD6TPJ7R');
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #100904;
+      --fg:          #ffedd7;
+      --muted:       #6c5f51;
+      --border:      #40372e;
+      --border-dash: #40372e;
+      --accent:      #dc5000;
+      --raised:      #382416;
+      --sep:         rgba(64,55,46,0.3);
+      --font-main: 'Plus Jakarta Sans', 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+      --radius-card: 12px;
+      --radius-pill: 36px;
+      --radius-rounded: 22.5px;
+    }
+
+    html.light {
+      --bg:          #f5ede0;
+      --fg:          #1c1008;
+      --muted:       #7a6652;
+      --border:      #c8b49a;
+      --border-dash: #c8b49a;
+      --accent:      #c44400;
+      --raised:      #e8d5be;
+      --sep:         rgba(160,130,100,0.25);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-main);
+      font-size: 14px;
+      line-height: 1.33;
+      min-height: 100vh;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    /* ─── NAV ─── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: background 0.3s ease, border-color 0.3s ease;
+    }
+
+    .nav-wordmark {
+      font-size: 15px; font-weight: 500;
+      color: var(--fg); text-decoration: none;
+      letter-spacing: 0.05em;
+    }
+
+    .nav-right { display: flex; align-items: center; gap: 16px; }
+
+    .nav-label {
+      font-size: 10px; color: var(--muted);
+      letter-spacing: 0.08em; text-transform: uppercase;
+    }
+
+    .theme-toggle {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      padding: 5px 12px;
+      color: var(--muted);
+      font-family: var(--font-main);
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: border-color 0.2s ease, color 0.2s ease;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .theme-toggle:hover { border-color: var(--fg); color: var(--fg); }
+    .theme-toggle-icon { font-size: 13px; }
+
+    /* ─── MAIN ─── */
+    main {
+      padding-top: 80px;
+      max-width: 860px;
+      margin: 0 auto;
+      padding-left: 24px; padding-right: 24px; padding-bottom: 80px;
+    }
+
+    /* ─── HERO ─── */
+    .hero {
+      padding: 56px 0 40px;
+      border-bottom: 1px dashed var(--border-dash);
+    }
+    .hero-label {
+      font-size: 10px; color: var(--accent);
+      letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px;
+    }
+    .hero-title {
+      font-size: clamp(29px, 6vw, 51px); font-weight: 500;
+      line-height: 0.95; color: var(--fg); margin-bottom: 20px;
+    }
+    .hero-subtitle {
+      font-size: 18px; line-height: 1.4;
+      color: var(--muted); max-width: 520px;
+    }
+
+    /* ─── SECTION ─── */
+    .section-header { padding: 36px 0 20px; }
+    .section-label {
+      font-size: 10px; color: var(--muted);
+      letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px;
+    }
+    .section-title { font-size: 24px; font-weight: 500; color: var(--fg); }
+
+    /* ─── GRID ─── */
+    .items-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 10px;
+      margin-bottom: 40px;
+    }
+    @media (max-width: 480px) {
+      .items-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    }
+
+    .item-card {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 16px 14px;
+      cursor: pointer;
+      transition: border-color 0.2s ease, background 0.2s ease;
+      display: flex; flex-direction: column; gap: 7px;
+      text-align: left; width: 100%;
+      position: relative;
+    }
+    .item-card:hover { border-color: var(--muted); }
+    .item-card.active {
+      border-color: var(--item-color, var(--accent));
+      background: color-mix(in srgb, var(--item-color, var(--accent)) 8%, transparent);
+    }
+
+    .item-emoji { font-size: 26px; line-height: 1; }
+    .item-name { font-size: 12px; font-weight: 500; color: var(--fg); line-height: 1.3; }
+    .item-time-badge { font-size: 10px; color: var(--muted); letter-spacing: 0.03em; }
+
+    .item-card .card-dot {
+      position: absolute;
+      top: 10px; right: 10px;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--item-color, var(--accent));
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .item-card.active .card-dot { opacity: 1; }
+
+    .grid-hint {
+      font-size: 11px; color: var(--muted);
+      margin-bottom: 20px; letter-spacing: 0.02em;
+    }
+
+    /* ─── DIVIDER ─── */
+    .divider { border: none; border-top: 1px dashed var(--border-dash); margin: 0; }
+
+    /* ─── DETAIL CARDS (multi) ─── */
+    .details-list {
+      margin: 32px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .detail-card {
+      border-radius: var(--radius-card);
+      padding: 20px;
+      border: 1px solid var(--item-color, var(--border));
+      background: color-mix(in srgb, var(--item-color, var(--accent)) 5%, transparent);
+      animation: fadeInUp 0.3s ease both;
+    }
+    .detail-top {
+      display: flex; align-items: center; gap: 14px; margin-bottom: 12px;
+    }
+    .detail-emoji { font-size: 32px; line-height: 1; flex-shrink: 0; }
+    .detail-name { font-size: 20px; font-weight: 500; color: var(--fg); margin-bottom: 3px; line-height: 1.1; }
+    .detail-time { font-size: 13px; color: var(--item-color, var(--accent)); }
+    .detail-context { font-size: 14px; line-height: 1.55; color: var(--muted); }
+    .detail-more {
+      display: inline-block; margin-top: 12px;
+      font-size: 12px; color: var(--item-color, var(--accent));
+      text-decoration: none; letter-spacing: 0.03em;
+      border-bottom: 1px solid currentColor; padding-bottom: 1px;
+    }
+
+    .timeline-empty {
+      text-align: center; padding: 48px 24px;
+      color: var(--muted); font-size: 14px;
+      border: 1px dashed var(--border-dash);
+      border-radius: var(--radius-card);
+      margin: 32px 0;
+    }
+    .timeline-empty-arrow { font-size: 22px; margin-bottom: 12px; display: block; color: var(--border); }
+
+    /* ─── TIMELINE ─── */
+    .timeline-section { padding: 36px 0 0; }
+    .timeline-wrap { position: relative; margin-top: 20px; }
+
+    .timeline-axis {
+      position: absolute;
+      left: 120px; top: 0; bottom: 0;
+      width: 1px; background: var(--border);
+    }
+    .timeline-rows { display: flex; flex-direction: column; gap: 0; }
+
+    .timeline-row {
+      display: flex; align-items: center;
+      min-height: 52px; position: relative;
+    }
+    .timeline-row-label {
+      width: 120px; padding-right: 20px;
+      text-align: right; font-size: 11px;
+      color: var(--muted); flex-shrink: 0; letter-spacing: 0.02em;
+    }
+    .timeline-tick {
+      position: absolute; left: 116px;
+      width: 9px; height: 1px; background: var(--border);
+    }
+    .timeline-content {
+      padding-left: 20px; flex: 1;
+      display: flex; align-items: center;
+      flex-wrap: wrap; gap: 6px;
+      min-height: 52px;
+    }
+
+    .timeline-progress-line {
+      position: absolute;
+      top: 0; width: 2px;
+      height: 0;
+      transition: height 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 1;
+      border-radius: 1px;
+    }
+
+    .timeline-dot {
+      position: absolute;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      border: 2px solid var(--bg);
+      top: 50%; transform: translateY(-50%);
+      z-index: 3;
+      opacity: 0;
+      transition: opacity 0.3s ease 0.5s;
+    }
+    .timeline-dot.visible { opacity: 1; }
+
+    .timeline-tag {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px;
+      border: 1px solid currentColor;
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      white-space: nowrap;
+      opacity: 0;
+      transform: translateX(-6px);
+      transition: opacity 0.35s ease 0.4s, transform 0.35s ease 0.4s;
+    }
+    .timeline-tag.visible { opacity: 1; transform: translateX(0); }
+    .timeline-tag-emoji { font-size: 12px; }
+
+    .timeline-row-separator {
+      height: 1px; background: var(--sep); margin-left: 120px;
+    }
+
+    /* ─── LEGEND ─── */
+    .timeline-legend {
+      display: flex; flex-wrap: wrap; gap: 10px;
+      margin-top: 28px; padding-top: 20px;
+      border-top: 1px dashed var(--border-dash);
+    }
+    .legend-item {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 12px; color: var(--muted);
+    }
+    .legend-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%; flex-shrink: 0;
+    }
+
+    /* ─── BROWSE / INDEX LINKS (SEO) ─── */
+    .browse-section { padding: 44px 0 0; border-top: 1px dashed var(--border-dash); margin-top: 48px; }
+    .browse-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 8px; margin-top: 20px;
+    }
+    .browse-link {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      text-decoration: none;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+    .browse-link:hover { border-color: var(--muted); background: var(--sep); }
+    .browse-emoji { font-size: 18px; line-height: 1; flex-shrink: 0; }
+    .browse-text { flex: 1; min-width: 0; }
+    .browse-name { font-size: 13px; color: var(--fg); }
+    .browse-time { font-size: 10px; color: var(--muted); letter-spacing: 0.03em; }
+    .browse-arrow { color: var(--border); font-size: 14px; }
+
+    /* ─── AD SLOT ─── */
+    .ad-slot {
+      margin: 40px 0;
+      min-height: 90px;
+      border: 1px dashed var(--border-dash);
+      border-radius: var(--radius-card);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--border); font-size: 11px; letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    /* ─── FOOTER ─── */
+    footer {
+      border-top: 1px dashed var(--border-dash);
+      margin-top: 80px; padding: 32px 24px; text-align: center;
+    }
+    footer .footer-inner { max-width: 860px; margin: 0 auto; }
+    .footer-link {
+      color: var(--muted); font-size: 13px;
+      text-decoration: none; transition: color 0.2s ease;
+    }
+    .footer-link:hover { color: var(--fg); }
+    .footer-sep { color: var(--border); margin: 0 12px; }
+    .footer-note { font-size: 11px; color: var(--border); margin-top: 10px; }
+    @keyframes heartbeat { 0%,100%{transform:scale(1)} 50%{transform:scale(1.18)} }
+    .footer-heart { color:#e03030; text-decoration:none; display:inline-block; }
+    .footer-heart:hover { animation: heartbeat 0.7s ease-in-out infinite; }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 600px) {
+      main { padding-left: 16px; padding-right: 16px; }
+      .hero { padding: 36px 0 28px; }
+      .hero-subtitle { font-size: 15px; }
+      .detail-name { font-size: 17px; }
+      .timeline-axis { left: 80px; }
+      .timeline-tick { left: 76px; }
+      .timeline-progress-line { left: 80px !important; }
+      .timeline-dot { left: 75px !important; }
+      .timeline-row-label { width: 80px; font-size: 10px; }
+      .timeline-row-separator { margin-left: 80px; }
+      .timeline-content { padding-left: 14px; }
+      .nav-label { display: none; }
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeInUp 0.5s ease both; }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a href="https://7ax.fun" class="nav-wordmark">7AX.FUN</a>
+    <div class="nav-right">
+      <span class="nav-label">Ecology &amp; Nature</span>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle light / dark mode">
+        <span class="theme-toggle-icon" id="themeIcon">☀️</span>
+        <span id="themeLabel">Light</span>
+      </button>
+    </div>
+  </nav>
+
+  <main>
+
+    <header class="hero fade-in">
+      <p class="hero-label">Ecological awareness</p>
+      <h1 class="hero-title">How long does it<br>take to decompose?</h1>
+      <p class="hero-subtitle">Pick one or more everyday items and compare how far their footprint reaches in time.</p>
+    </header>
+
+    <section aria-label="Item selection" class="fade-in">
+      <div class="section-header">
+        <p class="section-label">Items</p>
+        <h2 class="section-title">Pick what interests you</h2>
+      </div>
+      <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:12px;">
+        <p class="grid-hint" style="margin-bottom:0;">Select multiple items at once and compare them on the chart.</p>
+        <button id="clearBtn" onclick="clearAll()" style="display:none; background:none; border:none; color:var(--muted); font-family:var(--font-main); font-size:11px; cursor:pointer; text-decoration:underline; text-underline-offset:3px; padding:0; white-space:nowrap; margin-left:16px; transition:color 0.2s ease;" onmouseover="this.style.color='var(--fg)'" onmouseout="this.style.color='var(--muted)'">clear all</button>
+      </div>
+      <div class="items-grid" id="itemsGrid" role="list"></div>
+    </section>
+
+    <hr class="divider">
+
+    <section aria-label="Item details">
+      <div id="detailsList" class="details-list"></div>
+      <div id="emptyState" class="timeline-empty">
+        <span class="timeline-empty-arrow">↑</span>
+        Pick an item above and see how far its footprint reaches in time.
+      </div>
+    </section>
+
+    <section class="timeline-section" aria-label="Decomposition timeline">
+      <div class="section-header">
+        <p class="section-label">Timeline</p>
+        <h2 class="section-title">Scale of time</h2>
+      </div>
+      <div class="timeline-wrap" id="timelineWrap">
+        <div class="timeline-axis"></div>
+        <div id="progressLines"></div>
+        <div class="timeline-rows" id="timelineRows"></div>
+      </div>
+      <div class="timeline-legend" id="timelineLegend" style="display:none"></div>
+    </section>
+
+    <!-- AD SLOT (leaderboard) -->
+    <div class="ad-slot" aria-hidden="true">Ad</div>
+
+    <section class="browse-section" aria-label="Browse decomposition times by item">
+      <div class="section-header" style="padding-top:0;">
+        <p class="section-label">Reference</p>
+        <h2 class="section-title">How long each item takes to decompose</h2>
+      </div>
+      <p class="grid-hint">Full guide for every item — decomposition time, why it matters, and greener alternatives.</p>
+      <div class="browse-grid" id="browseGrid"></div>
+    </section>
+
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <a href="https://7ax.fun" class="footer-link">7ax.fun</a>
+      <span class="footer-sep">·</span>
+      <span class="footer-link">Decomposition Time</span>
+      <p class="footer-note">Data are approximate — actual decomposition time depends on environmental conditions.</p>
+      <p class="footer-note" style="margin-top:14px;font-size:12px;color:var(--muted);">built with <a href="https://mucker.cz/love.html" target="_blank" class="footer-heart">♥</a> and claude code · 2026 · <a href="https://7ax.fun" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; text-underline-offset:2px;">7ax.fun</a></p>
+    </div>
+  </footer>
+
+  <script>
+    const PALETTE = [
+      '#dc5000','#4a9b7a','#6b8fcf','#c4a020','#b05090',
+      '#40a0b0','#d06040','#5b8a3c','#9060c0','#c07840',
+      '#3a8080','#b04040','#507040','#8060a0','#c09060','#4080a0',
+    ];
+
+    const ITEMS = [
+      { id:  1, slug: 'paper-tissue',      emoji: '🤧', name: 'Paper tissue',          time: '2–4 weeks',     years: 0.06,  context: 'Even though it decomposes quickly, bleached paper releases chemicals into the soil.' },
+      { id:  2, slug: 'apple-core',        emoji: '🍎', name: 'Apple core',            time: '2 months',      years: 0.17,  context: 'Biodegradable waste that nature handles easily, but tossed by the roadside it attracts wildlife to traffic.' },
+      { id:  3, slug: 'cotton-sock',       emoji: '🧦', name: 'Cotton sock',           time: '1–5 years',     years: 3,     context: 'Cotton is natural, but dyes and elastane in the cuff slow it down. Wet environments extend decomposition further.' },
+      { id:  4, slug: 'cigarette-butt',    emoji: '🚬', name: 'Cigarette butt',        time: '15 years',      years: 15,    context: 'The filter is not cotton — it\'s cellulose acetate (plastic). It contains thousands of toxic substances.' },
+      { id:  5, slug: 'plastic-bag',       emoji: '🛍️', name: 'Plastic bag',           time: '20 years',      years: 20,    context: 'It breaks into microplastics long before it decomposes. Animals mistake it for food.' },
+      { id:  6, slug: 'paper-coffee-cup',  emoji: '☕', name: 'Paper coffee cup',      time: '30 years',      years: 30,    context: 'Looks like paper, but is lined with a PE film inside. That prevents composting and decomposition.' },
+      { id:  7, slug: 'condom',            emoji: '🩺', name: 'Condom (latex)',        time: '30 years',      years: 30,    context: 'Natural latex decomposes slower than it seems — synthetic additives and lubricant extend the process.' },
+      { id:  8, slug: 'chewing-gum',       emoji: '🍬', name: 'Chewing gum',           time: '50 years',      years: 50,    context: 'Modern chewing gum is made from synthetic polymers — essentially plastic and petroleum.' },
+      { id:  9, slug: 'aluminum-can',      emoji: '🥫', name: 'Aluminum can',          time: '200 years',     years: 200,   context: 'Aluminum can be recycled infinitely without quality loss — throwing it in nature is an enormous waste.' },
+      { id: 10, slug: 'plastic-straw',     emoji: '🥤', name: 'Plastic straw',         time: '200 years',     years: 200,   context: 'So small it slips through sorting screens. It threatens marine animals — found in their stomachs and nostrils.' },
+      { id: 11, slug: 'plastic-bottle',    emoji: '🧴', name: 'PET bottle',            time: '450 years',     years: 450,   context: 'It breaks down into microplastics that enter water, soil, and the food chain.' },
+      { id: 12, slug: 'fishing-line',      emoji: '🎣', name: 'Nylon fishing line',    time: '600 years',     years: 600,   context: 'An invisible trap — fish and birds get tangled in it. Anglers leave it in water and on shores.' },
+      { id: 13, slug: 'ziplock-bag',       emoji: '🔒', name: 'Ziplock bag',           time: '1,000 years',   years: 1000,  context: 'LDPE plastic with a multilayer structure — it practically never decomposes, only crumbles into microplastics.' },
+      { id: 14, slug: 'wireless-earbud',   emoji: '🎧', name: 'Wireless earbud',       time: '1,000+ years',  years: 1000,  context: 'A composite of plastics, metals, and a lithium battery. No part decomposes on its own — e-waste of the future.' },
+      { id: 15, slug: 'glass-bottle',      emoji: '🍾', name: 'Glass bottle',          time: '4,000+ years',  years: 4000,  context: 'Glass is essentially indestructible in nature, but of all materials it is the most recyclable.' },
+      { id: 16, slug: 'car-tire',          emoji: '🚗', name: 'Car tire',              time: '2,000 years',   years: 2000,  context: 'Vulcanized rubber barely decomposes in nature. Millions of tons of tire waste are generated every year.' },
+      { id: 17, slug: 'bamboo-toothpick',  emoji: '🌿', name: 'Bamboo toothpick',      time: '3–6 months',    years: 0.37,  context: 'Bamboo is one of the fastest-growing plants and composts easily. A good alternative to plastic cutlery.' },
+      { id: 18, slug: 'sneakers',          emoji: '👟', name: 'Sneakers',              time: '50–80 years',   years: 65,    context: 'A composite of different materials — rubber sole, synthetic fabric, EVA foam. Each layer decomposes differently.' },
+      { id: 19, slug: 'leather-handbag',   emoji: '👜', name: 'Leather handbag',       time: '25–40 years',   years: 32,    context: 'Industrially chrome-tanned leather doesn\'t behave like natural material — chemical treatment drastically slows decay and contaminates soil.' },
+      { id: 20, slug: 'denim-jacket',      emoji: '🧥', name: 'Denim jacket',          time: '10–12 months',  years: 1,     context: 'Cotton decomposes relatively quickly, but synthetic fibers in elastic cuts, metallic rivets, and dyes remain in soil long after.' },
+    ];
+
+    const MILESTONES = [
+      { years: 0,    label: 'Today' },
+      { years: 0.08, label: '1 month' },
+      { years: 0.25, label: '3 months' },
+      { years: 1,    label: '1 year' },
+      { years: 5,    label: '5 years' },
+      { years: 15,   label: '15 years' },
+      { years: 30,   label: '30 years' },
+      { years: 50,   label: '50 years' },
+      { years: 100,  label: '100 years' },
+      { years: 200,  label: '200 years' },
+      { years: 450,  label: '450 years' },
+      { years: 600,  label: '600 years' },
+      { years: 1000, label: '1,000 years' },
+      { years: 2000, label: '2,000 years' },
+      { years: 4000, label: '4,000 years' },
+    ];
+
+    let selectedIds = new Set();
+    const itemColors = new Map();
+    let colorIndex = 0;
+
+    function renderGrid() {
+      const grid = document.getElementById('itemsGrid');
+      grid.innerHTML = ITEMS.map(item => `
+        <button class="item-card" data-id="${item.id}" role="listitem" aria-label="${item.name} — ${item.time}">
+          <span class="card-dot"></span>
+          <span class="item-emoji" aria-hidden="true">${item.emoji}</span>
+          <span class="item-name">${item.name}</span>
+          <span class="item-time-badge">${item.time}</span>
+        </button>
+      `).join('');
+
+      grid.querySelectorAll('.item-card').forEach(btn => {
+        btn.addEventListener('click', () => toggleItem(Number(btn.dataset.id)));
+      });
+    }
+
+    const artOf = s => /^[aeiou]/i.test(s) ? 'an' : 'a';
+
+    function renderBrowse() {
+      const grid = document.getElementById('browseGrid');
+      grid.innerHTML = ITEMS.map(item => `
+        <a class="browse-link" href="/decompose/${item.slug}/">
+          <span class="browse-emoji" aria-hidden="true">${item.emoji}</span>
+          <span class="browse-text">
+            <span class="browse-name">How long does ${artOf(item.name)} ${item.name.toLowerCase()} take to decompose?</span><br>
+            <span class="browse-time">${item.time}</span>
+          </span>
+          <span class="browse-arrow">→</span>
+        </a>
+      `).join('');
+    }
+
+    function toggleItem(id) {
+      if (selectedIds.has(id)) {
+        selectedIds.delete(id);
+        itemColors.delete(id);
+        colorIndex = 0;
+        const recolored = new Map();
+        itemColors.forEach((_, existingId) => {
+          recolored.set(existingId, PALETTE[colorIndex++ % PALETTE.length]);
+        });
+        itemColors.clear();
+        recolored.forEach((c, i) => itemColors.set(i, c));
+      } else {
+        const color = PALETTE[colorIndex++ % PALETTE.length];
+        itemColors.set(id, color);
+        selectedIds.add(id);
+      }
+      updateCards();
+      updateDetails();
+      updateTimeline();
+      updateClearBtn();
+    }
+
+    function updateCards() {
+      document.querySelectorAll('.item-card').forEach(btn => {
+        const id = Number(btn.dataset.id);
+        const active = selectedIds.has(id);
+        btn.classList.toggle('active', active);
+        const color = itemColors.get(id) || 'var(--accent)';
+        btn.style.setProperty('--item-color', active ? color : '');
+      });
+    }
+
+    function updateDetails() {
+      const list = document.getElementById('detailsList');
+      const empty = document.getElementById('emptyState');
+
+      if (selectedIds.size === 0) {
+        list.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+
+      const ids = [...itemColors.keys()];
+      list.innerHTML = ids.map(id => {
+        const item = ITEMS.find(i => i.id === id);
+        const color = itemColors.get(id);
+        return `
+          <div class="detail-card" style="--item-color:${color}">
+            <div class="detail-top">
+              <span class="detail-emoji">${item.emoji}</span>
+              <div>
+                <div class="detail-name">${item.name}</div>
+                <div class="detail-time">${item.time}</div>
+              </div>
+            </div>
+            <div class="detail-context">${item.context}</div>
+            <a class="detail-more" href="/decompose/${item.slug}/">Full guide: ${item.name.toLowerCase()} →</a>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderTimeline() {
+      const rows = document.getElementById('timelineRows');
+      rows.innerHTML = MILESTONES.map((m, i) => `
+        <div class="timeline-row" data-years="${m.years}" data-index="${i}">
+          <span class="timeline-row-label">${m.label}</span>
+          <span class="timeline-tick"></span>
+          <div class="timeline-content" id="tcontent-${i}"></div>
+        </div>
+        ${i < MILESTONES.length - 1 ? '<div class="timeline-row-separator"></div>' : ''}
+      `).join('');
+    }
+
+    function updateTimeline() {
+      document.getElementById('progressLines').innerHTML = '';
+      document.querySelectorAll('.timeline-dot').forEach(d => d.remove());
+
+      MILESTONES.forEach((_, i) => {
+        const tc = document.getElementById(`tcontent-${i}`);
+        if (tc) tc.innerHTML = '';
+      });
+
+      const legend = document.getElementById('timelineLegend');
+
+      if (selectedIds.size === 0) {
+        legend.style.display = 'none';
+        return;
+      }
+
+      legend.style.display = 'flex';
+
+      const ids = [...itemColors.keys()];
+      const axisLeft = getAxisLeft();
+
+      const milestoneGroups = new Map();
+
+      ids.forEach(id => {
+        const item = ITEMS.find(i => i.id === id);
+        const color = itemColors.get(id);
+        const targetIdx = findMilestoneIndex(item.years);
+
+        if (!milestoneGroups.has(targetIdx)) milestoneGroups.set(targetIdx, []);
+        milestoneGroups.get(targetIdx).push({ id, item, color });
+      });
+
+      ids.forEach((id, slotIndex) => {
+        const item = ITEMS.find(i => i.id === id);
+        const color = itemColors.get(id);
+        const targetIdx = findMilestoneIndex(item.years);
+
+        const group = milestoneGroups.get(targetIdx);
+        const groupSlot = group.findIndex(g => g.id === id);
+
+        const lineOffset = groupSlot * 4;
+        const lineLeft = axisLeft + lineOffset;
+
+        const heightPx = getProgressHeight(targetIdx);
+
+        const line = document.createElement('div');
+        line.className = 'timeline-progress-line';
+        line.style.cssText = `left:${lineLeft}px; background:${color}; height:0;`;
+        document.getElementById('progressLines').appendChild(line);
+
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          line.style.height = Math.max(0, heightPx) + 'px';
+        }));
+
+        const dot = document.createElement('div');
+        dot.className = 'timeline-dot';
+        dot.style.cssText = `left:${lineLeft - 4}px; background:${color}; border-color:var(--bg);`;
+        const targetRow = document.querySelectorAll('.timeline-row')[targetIdx];
+        if (targetRow) targetRow.appendChild(dot);
+
+        setTimeout(() => dot.classList.add('visible'), 500);
+
+        const tag = document.createElement('span');
+        tag.className = 'timeline-tag';
+        tag.style.color = color;
+        tag.innerHTML = `<span class="timeline-tag-emoji">${item.emoji}</span>${item.name}`;
+        const tc = document.getElementById(`tcontent-${targetIdx}`);
+        if (tc) tc.appendChild(tag);
+        setTimeout(() => tag.classList.add('visible'), 100 + slotIndex * 80);
+      });
+
+      legend.innerHTML = [...itemColors.entries()].map(([id, color]) => {
+        const item = ITEMS.find(i => i.id === id);
+        return `<div class="legend-item">
+          <div class="legend-dot" style="background:${color}"></div>
+          <span>${item.emoji} ${item.name} — ${item.time}</span>
+        </div>`;
+      }).join('');
+    }
+
+    function getAxisLeft() {
+      const wrap = document.getElementById('timelineRows');
+      if (!wrap) return 120;
+      return window.innerWidth <= 600 ? 80 : 120;
+    }
+
+    function findMilestoneIndex(years) {
+      for (let i = 0; i < MILESTONES.length; i++) {
+        if (MILESTONES[i].years >= years) return i;
+      }
+      return MILESTONES.length - 1;
+    }
+
+    function getProgressHeight(targetIdx) {
+      const rows = document.querySelectorAll('.timeline-row');
+      const rowsEl = document.getElementById('timelineRows');
+      if (!rows[targetIdx] || !rowsEl) return 0;
+
+      const scrollY = window.scrollY;
+      const axisTop = rowsEl.getBoundingClientRect().top + scrollY;
+      const rowRect = rows[targetIdx].getBoundingClientRect();
+      const rowCenter = rowRect.top + scrollY + rowRect.height / 2;
+      return rowCenter - axisTop;
+    }
+
+    const html = document.documentElement;
+    const btn  = document.getElementById('themeToggle');
+    const icon = document.getElementById('themeIcon');
+    const lbl  = document.getElementById('themeLabel');
+
+    if (localStorage.getItem('theme') === 'light') applyLight();
+
+    btn.addEventListener('click', () => {
+      html.classList.contains('light') ? applyDark() : applyLight();
+    });
+
+    function applyLight() {
+      html.classList.add('light');
+      icon.textContent = '🌙'; lbl.textContent = 'Dark';
+      localStorage.setItem('theme', 'light');
+    }
+    function applyDark() {
+      html.classList.remove('light');
+      icon.textContent = '☀️'; lbl.textContent = 'Light';
+      localStorage.setItem('theme', 'dark');
+    }
+
+    function clearAll() {
+      selectedIds.clear();
+      itemColors.clear();
+      colorIndex = 0;
+      updateCards();
+      updateDetails();
+      updateTimeline();
+      document.getElementById('clearBtn').style.display = 'none';
+    }
+
+    function updateClearBtn() {
+      document.getElementById('clearBtn').style.display = selectedIds.size > 0 ? 'inline' : 'none';
+    }
+
+    renderGrid();
+    renderBrowse();
+    renderTimeline();
+  </script>
+
+</body>
+</html>

@@ -1,12 +1,45 @@
-<!doctype html>
-<html lang="cs">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>This War of Mine</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>7ax.fun</title>
+  <meta name="description" content="7ax.fun — small tools and experiments.">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&display=swap');
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{
+      background:#100904;color:#ffedd7;
+      font-family:'Plus Jakarta Sans',ui-sans-serif,system-ui,sans-serif;
+      min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      padding:24px;text-align:center;line-height:1.5;
+    }
+    h1{font-size:clamp(40px,10vw,72px);font-weight:600;letter-spacing:0.02em;margin-bottom:16px;
+       background:linear-gradient(90deg,#dc5000,#ffb070);-webkit-background-clip:text;background-clip:text;color:transparent;}
+    p{color:#6c5f51;font-size:16px;max-width:420px;margin-bottom:32px}
+    a.card{
+      display:inline-flex;align-items:center;gap:12px;
+      border:1px solid #40372e;border-radius:12px;padding:16px 24px;
+      color:#ffedd7;text-decoration:none;transition:border-color .2s ease,background .2s ease;
+    }
+    a.card:hover{border-color:#dc5000;background:rgba(220,80,0,0.06)}
+    .card-emoji{font-size:24px}
+    .card-text{text-align:left}
+    .card-title{font-size:15px;font-weight:500}
+    .card-sub{font-size:12px;color:#6c5f51}
+    footer{position:fixed;bottom:20px;font-size:11px;color:#40372e}
+  </style>
+</head>
+<body>
+  <h1>7ax.fun</h1>
+  <p>Small tools and experiments. More coming soon.</p>
+  <a class="card" href="/decompose/">
+    <span class="card-emoji">🌿</span>
+    <span class="card-text">
+      <span class="card-title">How Long Does It Take to Decompose?</span><br>
+      <span class="card-sub">Interactive decomposition-time chart</span>
+    </span>
+  </a>
+  <footer>© 2026 7ax.fun</footer>
+</body>
 </html>
